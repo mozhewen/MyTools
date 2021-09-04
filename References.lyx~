@@ -1,0 +1,335 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass ctex-article
+\begin_preamble
+\allowdisplaybreaks[4]
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language chinese-simplified
+\language_package default
+\inputencoding utf8-plain
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format pdf4
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 2.5cm
+\topmargin 2.5cm
+\rightmargin 2.5cm
+\bottommargin 2.5cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+MyTools参考手册
+\end_layout
+
+\begin_layout Author
+莫哲文
+\end_layout
+
+\begin_layout Section
+引言
+\end_layout
+
+\begin_layout Standard
+MyTools
+\end_layout
+
+\begin_layout Section
+标量积分的
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化最一般的形式可以处理分子具有张量结构的费曼积分。然而在通常情况下，我们习惯于先对费曼积分的张量结构做分解，求解其张量结构前面的标量系数。这些系数只依赖于
+费曼积分的分子与外动量缩并得到的标量积分。因此MyTools只实现了标量积分的
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化.
+ 
+\end_layout
+
+\begin_layout Standard
+考虑标量积分
+\begin_inset Formula 
+\begin{equation}
+I_{a_{1},\ldots,a_{n}}=\int d^{d}l_{1}\cdots d^{d}l_{L}\frac{1}{D_{1}^{a_{1}}D_{2}^{a_{2}}\cdots D_{n}^{a_{n}}}\label{eq:SInt}
+\end{equation}
+
+\end_inset
+
+其中传播子
+\begin_inset Formula $D_{i}$
+\end_inset
+
+是圈动量
+\begin_inset Formula $l_{1},\ldots,l_{L}$
+\end_inset
+
+的二次型，系数依赖于外动量
+\begin_inset Formula $p_{1},\ldots,p_{E}$
+\end_inset
+
+以及一些标量，如内线粒子质量.
+ 
+\begin_inset Formula $a_{i}$
+\end_inset
+
+是传播子的幂次，标量分子看成是负幂次.
+ 
+\begin_inset Formula 
+\begin{align*}
+Q\left(l;p,m,\alpha\right) & =\sum_{i}\alpha_{i}D_{i}\\
+ & =\sum_{ij}A_{ij}\left(\alpha\right)l_{i}\cdot l_{j}+\sum_{i}b_{i}\left(p;\alpha\right)\cdot l_{i}+c\left(p,m,\alpha\right)
+\end{align*}
+
+\end_inset
+
+今后总假定矩阵
+\begin_inset Formula $A$
+\end_inset
+
+正定或者负定（其行列式不为
+\begin_inset Formula $0$
+\end_inset
+
+），分别对应后面的将会出现的
+\begin_inset Formula $\pm_{1}$
+\end_inset
+
+，这对于一般物理问题总是成立的（一些HQET的传播子不知道）
+\begin_inset Formula 
+\begin{align*}
+I_{a_{1},\ldots,a_{n}} & =i^{\pm_{3}\left[-a\pm_{1}\left(L-dL/2\right)\mp_{2}\left(a-dL/2\right)\right]}\pi^{dL/2}\frac{\Gamma\left(a-dL/2\right)}{\prod_{i}\Gamma\left(a_{i}\right)}\\
+ & \qquad\times\int_{0}^{1}\left(\prod_{i}d\alpha_{i}\right)\delta\left(\sum_{i}\alpha_{i}-1\right)\frac{\left|\det A\right|^{-d/2}\prod_{i}\alpha_{i}^{a_{i}-1}}{\left[\pm_{2}\tilde{Q}\left(p,m,\alpha\right)\right]^{a-dL/2}}
+\end{align*}
+
+\end_inset
+
+其中
+\begin_inset Formula $a=\sum_{i}a_{i}$
+\end_inset
+
+.
+ 
+\begin_inset Formula $\pm_{3}$
+\end_inset
+
+分别对应传播子
+\begin_inset Formula $D_{i}$
+\end_inset
+
+中是
+\begin_inset Formula $\pm_{3}i\epsilon$
+\end_inset
+
+.
+ 
+\begin_inset Formula 
+\[
+\tilde{Q}\left(p,m,\alpha\right)=\frac{1}{4}A_{ij}^{-1}b_{i}\cdot b_{j}-c
+\]
+
+\end_inset
+
+
+\begin_inset Formula $\tilde{Q}$
+\end_inset
+
+中出现
+\begin_inset Formula $A$
+\end_inset
+
+矩阵的逆，因而是有理函数而不是多项式，但可以将其通分成伴随矩阵：引入如下
+\begin_inset Formula $\mathcal{U},\mathcal{F}$
+\end_inset
+
+多项式，
+\begin_inset Formula 
+\begin{align*}
+\mathcal{U} & =\det A\\
+\mathcal{F} & =\det A\left(\frac{1}{4}A_{ij}^{-1}b_{i}\cdot b_{j}-c\right)=\frac{1}{4}\tilde{A}_{ij}b_{i}\cdot b_{j}-c\mathcal{U}
+\end{align*}
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+I_{a_{1},\ldots,a_{n}}=\cdots\int_{0}^{1}\left(\prod_{i}d\alpha_{i}\alpha_{i}^{a_{i}-1}\right)\delta\left(\sum_{i}\alpha_{i}-1\right)\left(\pm_{1}\mathcal{U}\right)^{a-d\left(L+1\right)/2}\left(\pm_{1}\pm_{2}\mathcal{F}\right)^{dL/2-a}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+寻找等价标量积分
+\end_layout
+
+\begin_layout Standard
+很容易看出，对于标量积分
+\begin_inset CommandInset ref
+LatexCommand eqref
+reference "eq:SInt"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+，对圈动量
+\begin_inset Formula $l_{i}$
+\end_inset
+
+做任意线性变换
+\begin_inset Formula 
+\[
+l_{i}^{\prime}=\sum_{j}h_{ij}l_{j}+q_{i}
+\]
+
+\end_inset
+
+都不改变其
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化的形式。更一般地，如果两个标量积分的
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化形式在
+\begin_inset Formula $\alpha_{i}$
+\end_inset
+
+的置换下是等价的，则这两个积分一定相等。这对于
+\begin_inset Formula $a_{i}\ge0$
+\end_inset
+
+的情况显然是成立的，如果有某个
+\begin_inset Formula $a_{i}<0$
+\end_inset
+
+，
+\begin_inset Formula $\alpha_{i}$
+\end_inset
+
+的积分将会发散，但我们可以从对
+\begin_inset Formula $a_{i}$
+\end_inset
+
+进行解析延拓的意义上来定义积分的值，由解析延拓的唯一性两积分也应该是相等的。
+\end_layout
+
+\begin_layout Standard
+下面证明，要想判断
+\begin_inset Formula 
+\[
+\left(\prod_{i}\alpha_{i}^{a_{i}-1}\right)\mathcal{U}^{a-d\left(L+1\right)/2}\left(\pm_{2}\mathcal{F}\right)^{dL/2-a}
+\]
+
+\end_inset
+
+的
+\begin_inset Formula 
+\begin{align*}
+sa
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+FIRE接口
+\end_layout
+
+\begin_layout Bibliography
+\begin_inset CommandInset bibitem
+LatexCommand bibitem
+key "key-1"
+
+\end_inset
+
+ V.
+ A.
+ Smirnov, Feynman integral calculus.
+ 
+\end_layout
+
+\end_body
+\end_document

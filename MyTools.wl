@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.8.26*)
+(*Last update: 2021.9.2*)
 
 
 (* ::Section:: *)
@@ -16,16 +16,23 @@
 BeginPackage["MyTools`", {"FeynCalc`"}];
 
 ClearAll[Coef012]
+ClearAll[Adjoint]
 ClearAll[PropExplicit]
 ClearAll[SInt]
 ClearAll[EnumSP]
 ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
 
+ClearAll[\[Alpha]]
+ClearAll[UF]
+ClearAll[COrdering]
+ClearAll[GroupEquivSInt]
+ClearAll[FindSubsector]
+ClearAll[AP]
+
 ClearAll[FC2SInt]
 ClearAll[GroupSInt]
 ClearAll[RunFIRE]
-ClearAll[\[Alpha], AP]
 
 Begin["`Private`"]
 
@@ -78,6 +85,10 @@ Coef012[expr_, lList_List] :=
 	]
 
 
+Adjoint[m_?MatrixQ] := 
+	Map[Reverse, Minors[Transpose[m]], {0, 1}]Table[(-1)^(i+j), {i, Length[m]}, {j, Length[m]}]
+
+
 PropExplicit::usage =
 "PropExplicit[PropagatorDenominator[p, m]] rewrites the propagator denominator in the explicit form \
 \!\(\*SuperscriptBox[\(p\), \(2\)]\)-\!\(\*SuperscriptBox[\(m\), \(2\)]\). ";
@@ -85,7 +96,7 @@ PropExplicit[PropagatorDenominator[p_, m_]] := Pair[p, p] - m^2
 
 
 SInt::usage =
-"SInt[{qf1, a1}, {af2, a2}, ...] represents the scalar integral \
+"SInt[{qf1, a1}, {qf2, a2}, ...] represents the scalar integral \
 \[Integral]\!\(\*FractionBox[\(1\), \(\*SuperscriptBox[\(qf1\), \(a1\)] \*SuperscriptBox[\(qf2\), \(a2\)] ... \)]\)\[DifferentialD]l1.... ";
 SInt[] = 1;  (* Trivial integral *)
 
@@ -147,6 +158,165 @@ LinearReduce[expr_, basis_List, lList_List] :=
 (*Functions that are used by user*)
 
 
+(* ::Subsubsection:: *)
+(*\[Alpha]-parameterization*)
+
+
+\[Alpha]::usage = "\[Alpha] parameter returned by UF[] and AP[]. ";
+
+
+UF::usage = 
+"UF[sint, lList] gives the U, F polynomials in \[Alpha]-parameterization in the form {U, F}. ";
+UF[sint_SInt, lList_List] :=
+	Module[{\[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
+		Q, c, b, A, U},
+		Q = List@@sint[[;;, 1]] . \[Alpha]List;
+		{c, b, A} = Coef012[Q, lList];
+		{
+			U = Det[A], 
+			(* F = *)1/4 TensorContract[ExpandScalarProduct[Adjoint[A] . Outer[Pair, b, b]], {1, 2}] - c U
+		}
+	]
+
+
+COrdering::usage =
+"COrdering[polyList, vars, n:-1] gives the arrangements of variables in vars that maximize \
+the POT (position over term) canonical order of the polynomial vector polyList. n is used to \
+limit the number of the arrangements. ";
+COrdering[polyList_List, vars_List, n_Integer:-1] := 
+	Module[{word, r, arList, arListNew, powNew, ord, max},
+		word = Flatten[MapIndexed[
+			Join[{-#2[[1]], Expand@Last[#1]}, First[#1]]&,
+			CoefficientRules[polyList, vars],
+			{2}
+		], 1];
+		r = Range[Length[vars]];
+		arList = {{}};  (* Currently derived partial arrangement *)
+		While[Length[First[arList]] < Length[vars],
+			arListNew = Join@@(Function[ar, Append[ar, #] & /@ Complement[r, ar]]/@arList);
+			powNew = (Reverse[ Last/@Sort[word[[;;, Join[{1, 2}, #+2]]]] ])& /@ arListNew;
+			ord = Ordering[powNew];
+			max = powNew[[Last[ord]]];
+			arList = Part[arListNew, Select[ord, powNew[[#]] === max &]];
+			arList = If[n >= 0 && n < Length[arList], Take[arList, n], arList];
+		];
+		arList
+	]
+
+
+GroupEquivSInt::usage = 
+"GroupEquivSInt[sintList, lList] groups equivalent scalar integrals. It returns \
+{groups, lookupTable}. 
+SectorOnly \[Rule] False | True
+    Whether determine the equivalency only in the sense of sector (powers are irrelevant). ";
+Options[GroupEquivSInt] = {
+	SectorOnly -> False
+};
+GroupEquivSInt[sintList_List, lList_List, OptionsPattern[]] :=
+	Module[{alphaStruct, SectorOnly = OptionValue[SectorOnly],
+		U, F, \[Alpha]List, a, co, MyHead, 
+		groupsRaw, lookupTable = Table[0, Length[sintList]]},
+		alphaStruct = MapIndexed[{
+			{U, F} = UF[#1, lList]; 
+			\[Alpha]List = DeleteDuplicates@Cases[{U, F}, Subscript[\[Alpha], _], \[Infinity]];
+			a = List@@#1[[;;, 2]];
+			co = COrdering[{
+					U, F, 
+					If[SectorOnly,
+						Nothing,
+						(* NOTE: Shift powers because CoefficientRules[] only deals with polynomials. *)
+						Product[Subscript[\[Alpha], i]^(a[[i]]-Min[a]), {i, Length[a]}]
+					]
+				}, 
+				\[Alpha]List, 
+				1
+			];
+			{U, F} = {U, F}/.Table[\[Alpha]List[[co[[1, i]]]] -> \[Alpha]List[[i]], {i, Length[\[Alpha]List]}];
+			(* Prevent multi-tag in Sow[] *)MyHead[Expand[U], Expand[F], If[SectorOnly, Nothing, a[[co[[1]]]]]],
+			#1, First@#2}&,
+			sintList
+		];
+		groupsRaw = GatherBy[alphaStruct, First];
+		{
+			MapIndexed[(lookupTable[[#1[[3]]]] = #2; #1[[2]])&, groupsRaw, {2}],
+			lookupTable
+		}
+	]
+
+
+FindSubsector::usage = 
+"FindSubsector[high, low] checks whether there is a subsector of high that contains low (by brute force). 
+The powers in the SInt[]'s of high and low are irrelevant. ";
+FindSubsector[high_SInt, low_SInt, lList_List] :=
+	Module[{n = Length[low], can, rs},
+		Do[
+			If[Length[GroupEquivSInt[{high[[can]], low}, lList, SectorOnly -> True][[1]]] == 1,
+				Return[can]
+			],
+			{can, Subsets[Range@Length[high], {n}]}
+		]
+	]
+
+
+AP::usage =
+"AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
+\"eps\" \[Rule] None | ...
+    The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
+For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
+value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final result.
+\"Ieps\" \[Rule] Plus | Minus
+    Sign of \[ImaginaryI] \[Epsilon]. If left default, Plus is used. 
+\"A\" \[Rule] Plus | Minus
+    Whether A is positive | negative definite (assumed to be). If left default, It is set \
+to If[Euclidean, Minus, Identity]@*Ieps. 
+\"Denom\" \[Rule] Plus | Minus
+    Sign inside the denominator of the result. If left default, Plus is used. ";
+Options[AP] = {
+	"Euclidean" -> False,
+	"eps" -> None,
+	"Ieps" -> Plus,
+	"A" -> Undefined,
+	"Denom" -> Plus
+};
+AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
+	Module[{sgnIeps, sgnA, sgnDenom,
+			Q, \[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
+			a, h = Length[lList],
+			A, b, c,
+			Q1},
+		sgnIeps = OptionValue["Ieps"]; sgnDenom = OptionValue["Denom"];
+		If[OptionValue["A"] === Undefined,
+			sgnA = If[OptionValue["Euclidean"], Minus, Identity]@*sgnIeps,
+			sgnA = OptionValue["A"]
+		];
+		Q = (List@@sint[[;;, 1]] + If[OptionValue["eps"] === None, 0, sgnIeps[I OptionValue["eps"]]]) . \[Alpha]List;
+		a = List@@sint[[;;, 2]];
+
+		{c, b, A} = Echo@Coef012[Q, lList];
+		(* NOTE: Tr[] has been redefined by FeynCalc. Use TensorContract instead. *)
+		Q1 = sgnDenom[1/4 TensorContract[ExpandScalarProduct[Inverse[A] . Outer[Pair, b, b]], {1, 2}] - c];
+		<|
+			"integrand" -> Simplify[
+				((sgnA[1]^h Det[A])^(-d/2) Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[sint]}])/Q1^(Total[a]-d h/2),
+				Assumptions -> AllTrue[\[Alpha]List, # > 0 &]
+			],
+			"coef" -> Simplify[Times[
+				Power[I,
+					sgnIeps[-Total[a]
+						+sgnA[If[OptionValue["Euclidean"], d h/2, h-d h/2]]
+						+sgnDenom[-Total[a] + d h/2]
+					]
+				],
+				\[Pi]^(d h/2) Gamma[Total[a] - d h/2]/Times@@(Gamma/@a)
+			]]
+		|>
+	]
+
+
+(* ::Subsubsection:: *)
+(*FIRE interface*)
+
+
 FC2SInt::usage =
 "FC2SInt[expr, lList] converts FeynCalc amplitudes expr with loop momenta in lList into the SInt[] \
 representation. Note that FC2SInt[] does not factor or expand numerator, it just recognizes the form \
@@ -160,34 +330,42 @@ FC2SInt[expr_, lList_List] := FeynAmpDenominatorCombine[expr] /.
 
 
 GroupSInt::usage =
-"GroupSInt[SIntList, int, ext] groups scalar integrals into several classes of bases for \
+"GroupSInt[sintList, int, ext] groups scalar integrals into several classes of bases for \
 batch processing of FIRE. It returns with {result, lookupTable} where result is a list of grouped \
 SInt[] represented as {basis, idxList}, lookupTable\[LeftDoubleBracket]i\[RightDoubleBracket] = {j, k} represents that the i'th SInt[]
-in SIntList is mapped to the j'th basis and the k'th indices in this basis. NOTE: Propagators \
+in sintList is mapped to the j'th basis and the k'th indices in this basis. NOTE: Propagators \
 that appear in a SInt[] should be independent (in particular, duplicate free). It's recommended \
-to sort SIntList to the reverse order of propagator length before calling this function. ";
-GroupSInt[SIntList_List, int_List, ext_List] := 
+to sort sintList to the reverse order of propagator length before calling this function. ";
+
+Options[GroupSInt] = {
+	ShowProgress -> True
+}
+
+GroupSInt[sintList_List, int_List, ext_List, OptionsPattern[]] := 
 	Module[{
-			basis, idxList, SIntListMod = MapIndexed[{#1, First[#2]}&, SIntList], 
+			ShowProgress = OptionValue[ShowProgress],
+			basis, idxList, SIntListMod = MapIndexed[{#1, First[#2]}&, sintList], 
 			L = Length[int], EE = Length[ext], n,
 			curSInt, ptr, newbasis,
-			auxBasis = Echo[EnumSP[Join[int, ext], FCI@*SPD]//DeleteCases[#, _?(FreeQ[#, Alternatives@@int]&)]&],
-			result = {}, lookupTable = Table[0, Length[SIntList]]
+			auxBasis = EnumSP[Join[int, ext], FCI@*SPD]//DeleteCases[#, _?(FreeQ[#, Alternatives@@int]&)]&,
+			result = {}, lookupTable = Table[0, Length[sintList]]
 		},
 		n = (L(L+1))/2 + L EE;
 		DynamicModule[{prog = 0},
-			PrintTemporary@Row[{
-				ProgressIndicator[Dynamic[prog], {0, Length[SIntList]}],
-				Dynamic[prog], "/", Length[SIntList]
-			}];
+			If[ShowProgress === True,
+				PrintTemporary@Row[{
+					ProgressIndicator[Dynamic[prog], {0, Length[sintList]}],
+					Dynamic[prog], "/", Length[sintList]
+				}];
+			];
 			While[Length[SIntListMod] > 0,
 				basis = {}; idxList = {}; ptr = 1;
 				While[ptr <= Length[SIntListMod], 
 					curSInt = SIntListMod[[ptr, 1]];
-					newbasis = Union[List@@curSInt[[;;, 1]], basis];
+					newbasis = Union[ExpandScalarProduct/@(List@@curSInt[[;;, 1]]), ExpandScalarProduct/@basis];
 					If[Length[newbasis] > n, ptr++; Continue[]];
 					If[Not@LinearIndepQ[newbasis, int], ptr++; Continue[]];
-					basis = newbasis;
+					basis = Union[List@@curSInt[[;;, 1]], basis];  (* Keep the original form for human reading *)
 					AppendTo[idxList, (
 						If[Length@Cases[curSInt, {#, a_} :> a] > 1, (*Not possible*)Echo[curSInt], FirstCase[curSInt, {#, a_} :> a, 0]]
 					)&/@basis];
@@ -217,7 +395,7 @@ Options[RunFIRE] = {
 	InitialProblemNumber -> 1
 };
 
-RunFIRE[SIntGroup_List, int_List, ext_List, op:OptionsPattern[]] := 
+RunFIRE[sintGroup_List, int_List, ext_List, op:OptionsPattern[]] := 
 	Module[{
 			FIREHome = OptionValue[FIREHome],
 			Threads = OptionValue[Threads],
@@ -234,12 +412,12 @@ RunFIRE[SIntGroup_List, int_List, ext_List, op:OptionsPattern[]] :=
 
 		DynamicModule[{prog = 0},
 			PrintTemporary@Row[{
-				ProgressIndicator[Dynamic[prog], {0, Length[SIntGroup]}],
-				Dynamic[prog], "/", Length[SIntGroup]
+				ProgressIndicator[Dynamic[prog], {0, Length[sintGroup]}],
+				Dynamic[prog], "/", Length[sintGroup]
 			}];
 			Do[
-				basis = ExpandScalarProduct[SIntGroup[[pn, 1]]] /. Pair[Momentum[a_, ___], Momentum[b_, ___]] :> a b;
-				idxList = SIntGroup[[pn, 2]];
+				basis = ExpandScalarProduct[sintGroup[[pn, 1]]] /. Pair[Momentum[a_, ___], Momentum[b_, ___]] :> a b;
+				idxList = sintGroup[[pn, 2]];
 				pn += InitialProblemNumber - 1;
 
 				(* 1.1. Export integral indices *)
@@ -287,70 +465,13 @@ RunFIRE[SIntGroup_List, int_List, ext_List, op:OptionsPattern[]] :=
 				]
 
 				prog++;,
-				{pn, Length@SIntGroup}
+				{pn, Length@sintGroup}
 			]
 		];
 
 		(* Finish *)
 		CloseKernels[ker];
 		If[Not@NoOutput, result]
-	]
-
-
-\[Alpha]::usage =
-"\[Alpha] parameter returned by AP[]. "
-AP::usage =
-"AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
-\"eps\" \[Rule] None | ...
-    The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
-For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
-value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final result.
-\"Ieps\" \[Rule] Plus | Minus
-    Sign of \[ImaginaryI] \[Epsilon]. If left default, Plus is used. 
-\"A\" \[Rule] Plus | Minus
-    Whether A is positive | negative definite (assumed to be). If left default, It is set \
-to If[Euclidean, Minus, Identity]@*Ieps. 
-\"Denom\"\[Rule]Plus | Minus
-    Sign inside the denominator of the result. If left default, Plus is used. ";
-Options[AP] = {
-	"Euclidean" -> False,
-	"eps" -> None,
-	"Ieps" -> Plus,
-	"A" -> Undefined,
-	"Denom" -> Plus
-};
-AP[propList_SInt, lList_List, d_, OptionsPattern[]] :=
-	Module[{sgnIeps, sgnA, sgnDenom,
-			Q, \[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[propList]],
-			a, h = Length[lList],
-			A, b, c,
-			Q1},
-		sgnIeps = OptionValue["Ieps"]; sgnDenom = OptionValue["Denom"];
-		If[OptionValue["A"] === Undefined,
-			sgnA = If[OptionValue["Euclidean"], Minus, Identity]@*sgnIeps,
-			sgnA = OptionValue["A"]
-		];
-		Q = (List@@propList[[;;, 1]] + If[OptionValue["eps"] === None, 0, sgnIeps[I OptionValue["eps"]]]) . \[Alpha]List;
-		a = List@@propList[[;;, 2]];
-
-		{c, b, A} = Echo@Coef012[Q, lList];
-		(* NOTE: Tr[] has been redefined by FeynCalc. Use TensorContract instead. *)
-		Q1 = sgnDenom[1/4 TensorContract[ExpandScalarProduct[Inverse[A] . Outer[Pair, b, b]], {1, 2}] - c];
-		<|
-			"integrand" -> Simplify[
-				((sgnA[1]^h Det[A])^(-d/2) Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[propList]}])/Q1^(Total[a]-d h/2),
-				Assumptions -> AllTrue[\[Alpha]List, # > 0 &]
-			],
-			"coef" -> Simplify[Times[
-				Power[I,
-					sgnIeps[-Total[a]
-						+sgnA[If[OptionValue["Euclidean"], d h/2, h-d h/2]]
-						+sgnDenom[-Total[a] + d h/2]
-					]
-				],
-				\[Pi]^(d h/2) Gamma[Total[a] - d h/2]/Times@@(Gamma/@a)
-			]]
-		|>
 	]
 
 
