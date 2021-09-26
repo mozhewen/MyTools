@@ -228,7 +228,7 @@ I_{a_{1},\ldots,a_{n}} & =i^{\pm_{3}\left[-a\pm_{1}\left(L-dL/2\right)\mp_{2}\le
 
 \begin_inset Formula 
 \[
-I_{a_{1},\ldots,a_{n}}=\cdots\int_{0}^{1}\left(\prod_{i}d\alpha_{i}\alpha_{i}^{a_{i}-1}\right)\delta\left(\sum_{i}\alpha_{i}-1\right)\left(\pm_{1}\mathcal{U}\right)^{a-d\left(L+1\right)/2}\left(\pm_{1}\pm_{2}\mathcal{F}\right)^{dL/2-a}
+I_{a_{1},\ldots,a_{n}}=\cdots\int_{0}^{1}\left(\prod_{i}d\alpha_{i}\alpha_{i}^{a_{i}-1}\right)\delta\left(\sum_{i}\alpha_{i}-1\right)\left(\left(\pm_{1}1\right)^{L}\mathcal{U}\right)^{a-d\left(L+1\right)/2}\left(\left(\pm_{1}1\right)^{L}\pm_{2}\mathcal{F}\right)^{dL/2-a}
 \]
 
 \end_inset

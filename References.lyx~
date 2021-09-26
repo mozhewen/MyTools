@@ -295,19 +295,205 @@ l_{i}^{\prime}=\sum_{j}h_{ij}l_{j}+q_{i}
 \end_layout
 
 \begin_layout Standard
-下面证明，要想判断
-\begin_inset Formula 
-\[
-\left(\prod_{i}\alpha_{i}^{a_{i}-1}\right)\mathcal{U}^{a-d\left(L+1\right)/2}\left(\pm_{2}\mathcal{F}\right)^{dL/2-a}
-\]
-
-\end_inset
-
-的
+下面证明，要想判断的
 \begin_inset Formula 
 \begin{align*}
 sa
 \end{align*}
+
+\end_inset
+
+定义多项式的正则序：首先对于两单项式
+\begin_inset Formula 
+\[
+f=cx_{1}^{a_{1}}x_{2}^{a_{2}}\cdots x_{n}^{a_{n}},\quad g=dx_{1}^{b_{1}}x_{2}^{b_{2}}\cdots x_{n}^{b_{n}}
+\]
+
+\end_inset
+
+若系数
+\begin_inset Formula $c,d$
+\end_inset
+
+在某种编码下的正则序（是全序）满足
+\begin_inset Formula $c\prec d$
+\end_inset
+
+，则定义
+\begin_inset Formula $f\prec g$
+\end_inset
+
+。若
+\begin_inset Formula $c=d$
+\end_inset
+
+（在编码的形式上相等，严格于数学上相等）但
+\begin_inset Formula $a_{1}<b_{1}$
+\end_inset
+
+，定义
+\begin_inset Formula $f\prec g$
+\end_inset
+
+，否则若一直有
+\begin_inset Formula $c=d,\ldots,a_{i}=b_{i}$
+\end_inset
+
+，而
+\begin_inset Formula $a_{i+1}<b_{i+1}$
+\end_inset
+
+，同样定义
+\begin_inset Formula $f\prec g$
+\end_inset
+
+。如果
+\begin_inset Formula $c=d$
+\end_inset
+
+且
+\begin_inset Formula $x_{i}$
+\end_inset
+
+所有幂次相等，显然
+\begin_inset Formula $f=g$
+\end_inset
+
+。
+\end_layout
+
+\begin_layout Standard
+对于两多项式
+\begin_inset Formula 
+\[
+f=m_{1}+m_{2}+\cdots,\quad g=m_{1}^{\prime}+m_{2}^{\prime}+\cdots
+\]
+
+\end_inset
+
+其中
+\begin_inset Formula $m_{i},m_{i}^{\prime}$
+\end_inset
+
+为单项式且按正则序
+\series bold
+逆序
+\series default
+排列（
+\begin_inset Formula $m_{1}^{\left(\prime\right)}\succ m_{2}^{\left(\prime\right)}\succ\cdots$
+\end_inset
+
+），若
+\begin_inset Formula $m_{1}\prec m_{1}^{\prime}$
+\end_inset
+
+，则定义
+\begin_inset Formula $f\prec g$
+\end_inset
+
+；若直到
+\begin_inset Formula $i$
+\end_inset
+
+有
+\begin_inset Formula $m_{i}=m_{i}^{\prime}$
+\end_inset
+
+但
+\begin_inset Formula $m_{i+1}=m_{i+1}^{\prime}$
+\end_inset
+
+，同样定义
+\begin_inset Formula $f\prec g$
+\end_inset
+
+，一直下去直到
+\begin_inset Formula $f=g$
+\end_inset
+
+。这样定义的好处是
+\end_layout
+
+\begin_layout Standard
+要想对两个标量积分，判断其
+\begin_inset Formula $\alpha$
+\end_inset
+
+-参数化
+\begin_inset Formula 
+\begin{equation}
+\left(\prod_{i}\alpha_{i}^{a_{i}-1}\right)\left(\pm_{1}\mathcal{U}\right)^{a-d\left(L+1\right)/2}\left(\pm_{1}\pm_{2}\mathcal{F}\right)^{dL/2-a}\label{eq:alpha_struct}
+\end{equation}
+
+\end_inset
+
+结构的等价性（其中已假定对所有的积分采取相同的
+\begin_inset Formula $\pm$
+\end_inset
+
+的选取），只需将
+\begin_inset CommandInset ref
+LatexCommand eqref
+reference "eq:alpha_struct"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+写成对如下自由模中的元素
+\begin_inset Formula 
+\begin{equation}
+\mathcal{U}e_{1}+\mathcal{F}e_{2}+\prod_{i}\alpha_{i}^{a_{i}-1}e_{3}\label{eq:alpha_struct_mod}
+\end{equation}
+
+\end_inset
+
+然后对
+\begin_inset Formula $\alpha_{i}$
+\end_inset
+
+做置换，使得
+\begin_inset CommandInset ref
+LatexCommand eqref
+reference "eq:alpha_struct_mod"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+形式，在POT（position over term）正则序（单项式序满足
+\begin_inset Formula $f_{i}e_{i}\prec f_{j}e_{j}$
+\end_inset
+
+，如果
+\begin_inset Formula $i<j$
+\end_inset
+
+，或
+\begin_inset Formula $i=j$
+\end_inset
+
+且
+\begin_inset Formula $f_{i}\prec f_{j}$
+\end_inset
+
+）下最大。如果两个标量积分的
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{flalign*}
+\end{flalign*}
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+f\left(x_{1},x_{2},\ldots,x_{n}\right)=\sum c_{n}x_{1}^{n_{1}}x
+\]
 
 \end_inset
 
