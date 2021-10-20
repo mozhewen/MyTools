@@ -4,7 +4,7 @@
 Get@FileNameJoin[{$ScriptCommandLine[[2]], "FIRE6.m"}];
 
 
-{Internal, External, Propagators, Replacements} = Import[StringTemplate["``.wl"][$ScriptCommandLine[[3]]]];
+{Internal, External, Propagators, Replacements} = Import[StringTemplate["``_defs.wl"][$ScriptCommandLine[[3]]]];
 
 PrepareIBP[];
 Prepare[AutoDetectRestrictions->True, LI->True];

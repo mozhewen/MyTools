@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.9.13*)
+(*Last update: 2021.10.17*)
 
 
 (* ::Section:: *)
@@ -29,15 +29,17 @@ ClearAll[FC2FIRE]
 ClearAll[\[Alpha]]
 ClearAll[UF]
 ClearAll[COrdering]
+ClearAll[AlphaStructure]
 ClearAll[GroupEquivSInt]
+ClearAll[Match2EquivSInt]
 ClearAll[GuessTrans]
-ClearAll[AP, APNew]
+ClearAll[APOld, AP]
 
 ClearAll[CompleteBasis]
 ClearAll[Idx]
 ClearAll[ExpressByBasis]
 ClearAll[GenFIREFile]
-ClearAll[RunFIRE]
+ClearAll[GetFIRETables]
 
 Begin["`Private`"]
 
@@ -207,10 +209,9 @@ UF[sint_SInt, lList_List] :=
 
 
 COrdering::usage =
-"COrdering[polyList, vars, n:-1] gives the arrangements of variables in vars that maximize \
-the POT (position over term) canonical order of the polynomial vector polyList. n is used to \
-limit the number of the output arrangements. ";
-COrdering[polyList_List, vars_List, n_Integer:-1] := 
+"COrdering[polyList, vars] gives the arrangements of variables in vars that maximize the POT \
+(position over term) canonical order of the polynomial vector polyList. ";
+COrdering[polyList_List, vars_List] := 
 	Module[{word, r, arList, arListNew, powNew, ord, max},
 		word = Flatten[MapIndexed[
 			Join[{-First[#2], Expand@Last[#1]}, First[#1]]&,
@@ -225,9 +226,43 @@ COrdering[polyList_List, vars_List, n_Integer:-1] :=
 			ord = Ordering[powNew];
 			max = powNew[[Last[ord]]];
 			arList = Part[arListNew, Select[ord, powNew[[#]] === max &]];
-			arList = If[n >= 0 && n < Length[arList], Take[arList, n], arList];
 		];
 		arList
+	]
+
+
+AlphaStructure::usage =
+"AlphaStructure[sint, lList] returns {{U, F, a}, arr} where U, F polynomials and propagator \
+indices a are rearrangeed to the maximal canonical order. The arrangements of the propagators \
+of sint for the maximal canonical order is listed in arr. 
+\"SectorOnly\" \[Rule] False | True
+    Whether determine the equivalency only in the sense of sector (whether powers are irrelevant). ";
+Options[AlphaStructure] = {
+	"SectorOnly" -> False
+};
+AlphaStructure[sint_SInt, lList_List, OptionsPattern[]]:=
+	Module[{SectorOnly = OptionValue["SectorOnly"],
+			U, F, \[Alpha]List, a, co},
+		{U, F} = UF[sint, lList]; 
+		(* NOTE: Here \[Alpha]List must be in the canonical order. *)
+		\[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]];
+		a = List@@sint[[;;, 2]];
+		co = COrdering[{
+				U, F, 
+				If[SectorOnly,
+					Nothing,
+					(* NOTE: Shift powers because CoefficientRules[] only deals with polynomials. *)
+					Product[Subscript[\[Alpha], i]^(a[[i]]-Min[a]), {i, Length[a]}]
+				]
+			}, 
+			\[Alpha]List
+		];
+		{U, F} = {U, F}/.Table[\[Alpha]List[[co[[1, i]]]] -> \[Alpha]List[[i]], {i, Length[\[Alpha]List]}];
+
+		(*Return*){
+			{Expand[U], Expand[F], If[SectorOnly, Nothing, a[[co[[1]]]]]},
+			co
+		}
 	]
 
 
@@ -237,35 +272,18 @@ GroupEquivSInt::usage =
 igroup the group index and ipos the index inside this group, arr is the arrangement of propagators \
 that meet the maximal canonical order in \[Alpha]-representation. If a scalar integral is zero, its arr \
 will be set to Null. 
-SectorOnly \[Rule] False | True
+\"SectorOnly\" \[Rule] False | True
     Whether determine the equivalency only in the sense of sector (whether powers are irrelevant). ";
 Options[GroupEquivSInt] = {
-	SectorOnly -> False
+	"SectorOnly" -> False
 };
 GroupEquivSInt[sintList_List, lList_List, OptionsPattern[]] :=
-	Module[{alphaStruct, SectorOnly = OptionValue[SectorOnly],
-			U, F, \[Alpha]List, a, co, 
+	Module[{alphaStruct, as,
 			groupsRaw, lookupTable = Table[0, Length[sintList]]},
 		alphaStruct = MapIndexed[{
-			{U, F} = UF[#1, lList]; 
-			(* NOTE: Here \[Alpha]List must be in the canonical order. *)
-			\[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[#1]];
-			a = List@@#1[[;;, 2]];
-			co = COrdering[{
-					U, F, 
-					If[SectorOnly,
-						Nothing,
-						(* NOTE: Shift powers because CoefficientRules[] only deals with polynomials. *)
-						Product[Subscript[\[Alpha], i]^(a[[i]]-Min[a]), {i, Length[a]}]
-					]
-				}, 
-				\[Alpha]List, 
-				1
-			];
-			{U, F} = {U, F}/.Table[\[Alpha]List[[co[[1, i]]]] -> \[Alpha]List[[i]], {i, Length[\[Alpha]List]}];
-
-			{Expand[U], Expand[F], If[SectorOnly, Nothing, a[[co[[1]]]]]},
-			#1, First@#2, First@co}&,
+			as = AlphaStructure[#1, lList, "SectorOnly" -> OptionValue["SectorOnly"]];
+			First[as],
+			#1, First@#2, First@Last@as}&,
 			sintList
 		];
 		groupsRaw = GatherBy[alphaStruct, First];
@@ -283,9 +301,35 @@ GroupEquivSInt[sintList_List, lList_List, OptionsPattern[]] :=
 	]
 
 
+Match2EquivSInt::usage =
+"Match2EquivSInt[src, dest, lList] tries to find all propagator arrangements of scalar integral src \
+that can match the other scalar integral dest by a loop momentum transformation. It returns {} if src \
+and dest does not match. It also tries to deal with null integrals. However the arrangements returned \
+may not correspond to a valid momentum transformation. 
+\"SectorOnly\" \[Rule] False | True
+    Whether determine the equivalency only in the sense of sector (whether powers are irrelevant). ";
+Options[Match2EquivSInt] = {
+	"SectorOnly" -> False
+};
+Match2EquivSInt[src_SInt, dest_SInt, lList_List, OptionsPattern[]] :=
+	Module[{alphaStructDest, alphaStructSrc, temp},
+
+		alphaStructDest = AlphaStructure[dest, lList, "SectorOnly" -> OptionValue["SectorOnly"]];
+
+		alphaStructSrc = AlphaStructure[src, lList, "SectorOnly" -> OptionValue["SectorOnly"]];
+
+		If[alphaStructSrc[[1]] === alphaStructDest[[1]] && Length[alphaStructDest[[2, 1]]] === Length[alphaStructSrc[[2, 1]]],
+			temp = Table[0, Length[alphaStructDest[[2, 1]]]];
+			(temp[[alphaStructDest[[2, 1]]]] = #; temp)& /@ alphaStructSrc[[2]]
+		,(*Else*)
+			{}
+		]
+	]
+
+
 GuessTrans::usage =
-"GuessTrans[src, dest, lList] tries to transform a list of quadratic forms src to the corresponding dest \
-by a linear transformation of loop momenta in lList. ";
+"GuessTrans[src, dest, lList] tries to transform a list of quadratic forms src to the corresponding \
+dest by a linear transformation of loop momenta in lList. ";
 GuessTrans[src_List, dest_List, lList_List] := 
 	Module[{n = Length[lList], cList, rule, d, eq, coef, sln},
 		(* Only select those with Jacobian = \[PlusMinus]1 *)
@@ -305,7 +349,7 @@ GuessTrans[src_List, dest_List, lList_List] :=
 	]
 
 
-AP::usage =
+APOld::usage =
 "AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
 \"eps\" \[Rule] None | ...
     The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
@@ -318,14 +362,14 @@ value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final r
 to If[Euclidean, Minus, Identity]@*Ieps. 
 \"Denom\" \[Rule] Plus | Minus
     Sign inside the denominator of the result. If left default, Plus is used. ";
-Options[AP] = {
+Options[APOld] = {
 	"Euclidean" -> False,
 	"eps" -> None,
 	"Ieps" -> Plus,
 	"A" -> Undefined,
 	"Denom" -> Plus
 };
-AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
+APOld[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 	Module[{sgnIeps, sgnA, sgnDenom,
 			Q, \[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
 			a, h = Length[lList],
@@ -361,7 +405,7 @@ AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 
 
 (* To be tested *)
-APNew::usage =
+AP::usage =
 "AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
 \"eps\" \[Rule] None | ...
     The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
@@ -374,14 +418,14 @@ value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final r
 to If[Euclidean, Minus, Identity]@*Ieps. 
 \"Denom\" \[Rule] Plus | Minus
     Sign inside the denominator of the result. If left default, Plus is used. ";
-Options[APNew] = {
+Options[AP] = {
 	"Euclidean" -> False,
 	"eps" -> None,
 	"Ieps" -> Plus,
 	"A" -> Undefined,
 	"Denom" -> Plus
 };
-APNew[sint_SInt, lList_List, d_, OptionsPattern[]] :=
+AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 	Module[{sgnIeps, sgnA, sgnDenom,
 			a, Ta, L = Length[lList],
 			U, F},
@@ -424,16 +468,16 @@ APNew[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 
 
 CompleteBasis::usage =
-"CompleteBasis[basis, int, ext, AuxiliaryBasis -> {aux1, aux2, ...}] completes basis with respect to \
+"CompleteBasis[basis, int, ext, \"AuxiliaryBasis\" \[Rule] {aux1, aux2, ...}] completes basis with respect to \
 the specific auxiliary basis aux1, aux2, ... ";
 Options[CompleteBasis] = {
-	AuxiliaryBasis -> None
+	"AuxiliaryBasis" -> None
 }
 CompleteBasis[basis_List, int_List, ext_List, OptionsPattern[]] :=
 	Module[{result = basis, auxBasis},
-		auxBasis = If[OptionValue[AuxiliaryBasis] === None, 
+		auxBasis = If[OptionValue["AuxiliaryBasis"] === None, 
 			EnumSP[Join[int, ext], FCI@*SPD]//DeleteCases[#, _?(FreeQ[#, Alternatives@@int]&)]&,
-			OptionValue[AuxiliaryBasis]
+			OptionValue["AuxiliaryBasis"]
 		];
 		Do[
 			If[LinearIndepQ[Append[result, aux], int],
@@ -451,19 +495,17 @@ Idx::usage = "Idx[a1, a2, ] represents the indices of propagators in a specific 
 ExpressByBasis::usage =
 "ExpressByBasis[SIntList, basis, lList] tries to express the propagators of scalar integrals in SIntList \
 with respect to basis in the sense of change of variables of loop momenta. The numerators (with negative \
-indices) are automatically expanded as linear combinations of basis. If a scalar integral cannot be \
-expressed by basis, Null is returned. Note that zero integrals will not be expressed and Null is also \
-returned in this case. ";
+indices) are automatically expanded as linear combinations of basis. ";
 ExpressByBasis::guessfail = "Failed to derive momentum transformation rules for scalar integral i = `` \
-with denominator \[Rule] basis arrangement = `` \[Rule] ``. "
+with propagator \[Rule] basis arrangement = `` \[Rule] ``. "
 Options[ExpressByBasis] = {
-	AllMatches -> False,
-	ShowProgress -> True
+	"AllMatches" -> False,
+	"ShowProgress" -> True
 }
 ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
-	Module[{AllMatches = OptionValue[AllMatches],
-			ShowProgress = OptionValue[ShowProgress],
-			sint, denom, numer, b, bList, word, lrules, 
+	Module[{AllMatches = OptionValue["AllMatches"],
+			ShowProgress = OptionValue["ShowProgress"],
+			sint, denomPos, denom, numer, b, bList, word, lrules, 
 			rt, idx, rs, result},
 		bList = Array[b, Length[basis]];
 		DynamicModule[{prog = 0},
@@ -474,22 +516,21 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 				}];
 			];
 			result = Table[
-				rs = {}; denom = SInt@@Cases[sint, {_, a_/;a>0}];
-				Do[
-					rt = GroupEquivSInt[
-						{SInt@@({#, 1}&/@(basis[[can]])), denom}, 
-						lList, 
-						SectorOnly -> True
-					];
-					If[Length[rt[[1]]] == 1 && rt[[2, 1, 2]] =!= Null && rt[[2, 2, 2]] =!= Null,
+				rs = {};
+				denomPos = Flatten@Position[sint, {_, a_/;a>0}, {1}, Heads -> False];
+				denom = sint[[denomPos]];
+				Catch@Do[
+					rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, SectorOnly -> True];
+					rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];
+					Do[
 						(* Deal with the denominator *)
 						idx = Table[0, Length[basis]];
-						idx [[ can[[rt[[2, 1, 2]](* arrangement for basis *)]] ]] = 
-							List@@denom[[rt[[2, 2, 2]](* arrangement for denom *), 2]];
+						idx[[can]] = List@@denom[[arrDenom, 2]];
+
 						(* Deal with the numerator *)
-						lrules = GuessTrans[List@@denom[[rt[[2, 2, 2]], 1]], basis[[can[[rt[[2, 1, 2]]]]]], lList];
-						If[lrules === Null && Length[denom] < Length[sint], 
-							Message[ExpressByBasis::guessfail, prog+1, rt[[2, 2, 2]], can[[rt[[2, 1, 2]]]]]; 
+						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basis[[can]], lList];
+						If[lrules === Null && Count[sint, {_, a_Integer/;a<0}] > 0 (* Non-trivial numerator *), 
+							Message[ExpressByBasis::guessfail, prog+1, denomPos[[arrDenom]], can]; 
 							Continue[]
 						(*Else*)
 							(* No numerator (numer = 1) *)
@@ -500,14 +541,17 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 						word = Join[{Expand@Last[#1]}, First[#1]]&/@CoefficientRules[numer, bList];
 						AppendTo[rs, {
 							Sum[mono[[1]]Idx@@(idx - mono[[2;;]]), {mono, word}],
-							{rt[[2, 2, 2]], can[[rt[[2, 1, 2]]]]}
+							arrDenom -> can
 						}];
-						If[AllMatches === False, Break[]];
-					],
+						If[AllMatches === False, Throw[Null]];
+						,
+						{arrDenom, If[AllMatches === True, rt, {First[rt, Nothing]}]}
+					]
+					,
 					{can, Subsets[Range@Length[basis], {Length[denom]}]}
 				]; 
 				prog++;
-				(*Return*)rs,
+				(*Return*)If[AllMatches === True, rs, First[rs, Null]],
 				{sint, sintList}
 			];
 		];
@@ -516,32 +560,28 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 
 
 Options[GenFIREFile] = {
-	FIREHome -> "/home/mozhewen/Documents/fire/FIRE6/",
-	Threads -> 8,
-	Preferred -> {},
-	OutDir :> NotebookDirectory[]
+	"FIREHome" -> "/home/mozhewen/Documents/fire/FIRE6/",
+	"Threads" -> 8,
+	"Preferred" -> {},
+	"OutDir" :> NotebookDirectory[]
 };
 
-GenFIREFile[pn_Integer, problemName_String, idxList_List, basis_List, int_List, ext_List, op:OptionsPattern[]] := 
+GenFIREFile[pn_Integer, problemName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
 	Module[{
-			FIREHome = OptionValue[FIREHome],
-			Threads = OptionValue[Threads],
-			Preferred = OptionValue[Preferred],
-			OutDir = OptionValue[OutDir],
-			ker,
+			FIREHome = OptionValue["FIREHome"],
+			Threads = OptionValue["Threads"],
+			Preferred = OptionValue["Preferred"],
+			OutDir = OptionValue["OutDir"],
 			basisF = FC2FIRE[basis]
 		},
-		(* Initialization *)
-		ker = LaunchKernels[1];
-		ParallelEvaluate[Get@FileNameJoin[{FIREHome, "FIRE6.m"}], ker, DistributedContexts -> Automatic];
 
 		(* 1.1. Export integral indices *)
-		Export[FileNameJoin[{OutDir, StringTemplate["``.m"][problemName]}], {pn, List@@#}&/@idxList];
+		Export[FileNameJoin[{OutDir, StringTemplate["``.wl"][problemName]}], {pn, List@@#}&/@idxList];
 		If[Preferred =!= {},
 			Export[FileNameJoin[{OutDir, StringTemplate["``.preferred"][problemName]}], {pn, List@@#}&/@Preferred, "WL"];
 		];
 		(* 1.2. Export propagator information *)
-		Export[FileNameJoin[{OutDir, StringTemplate["``.wl"][problemName]}],
+		Export[FileNameJoin[{OutDir, StringTemplate["``_defs.wl"][problemName]}],
 			{
 				(*Internal=*)int,
 				(*External=*)ext,
@@ -561,7 +601,7 @@ GenFIREFile[pn_Integer, problemName_String, idxList_List, basis_List, int_List, 
 #start
 #problem `no` `na`.start
 `pf`
-#integrals `na`.m
+#integrals `na`.wl
 #output `na`.tables
 "][<|
 	"th" -> Threads, 
@@ -572,101 +612,41 @@ GenFIREFile[pn_Integer, problemName_String, idxList_List, basis_List, int_List, 
 |>],
 			"Text"
 		];
-
-		(* Finish *)
-		CloseKernels[ker];
 	]
 
 
-Options[RunFIRE] = {
-	FIREHome -> "/home/mozhewen/Documents/fire/FIRE6/",
-	Threads -> 8,
-	OutDir :> NotebookDirectory[],
-	NoOutput -> False,
-	InitialProblemNumber -> 1
+ClearAll[subker]
+Options[GetFIRETables] = {
+	"FIREHome" -> "/home/mozhewen/Documents/fire/FIRE6/",
+	"OutDir" :> NotebookDirectory[]
 };
 
-RunFIRE[basisGroups_List, int_List, ext_List, op:OptionsPattern[]] := 
+GetFIRETables[problemName_String, OptionsPattern[]] := 
 	Module[{
-			FIREHome = OptionValue[FIREHome],
-			Threads = OptionValue[Threads],
-			OutDir = OptionValue[OutDir],
-			NoOutput = OptionValue[NoOutput],
-			InitialProblemNumber = OptionValue[InitialProblemNumber],
-			ker,
-			basis, idxList,
-			result = {}
+			FIREHome = OptionValue["FIREHome"],
+			OutDir = OptionValue["OutDir"],
+			fileName
 		},
-		(* Initialization *)
-		ker = LaunchKernels[1];
-		ParallelEvaluate[Get@FileNameJoin[{FIREHome, "FIRE6.m"}], ker, DistributedContexts -> Automatic];
-
-		DynamicModule[{prog = 0},
-			PrintTemporary@Row[{
-				ProgressIndicator[Dynamic[prog], {0, Length[basisGroups]}],
-				Dynamic[prog], "/", Length[basisGroups]
-			}];
-			Do[
-				basis = ExpandScalarProduct[basisGroups[[pn, 1]]] /. Pair[Momentum[a_, ___], Momentum[b_, ___]] :> a b;
-				idxList = basisGroups[[pn, 2]];
-				pn += InitialProblemNumber - 1;
-
-				(* 1.1. Export integral indices *)
-				Export[FileNameJoin[{OutDir, StringTemplate["``.m"][pn]}], {pn, #}&/@idxList];
-				(* 1.2. Export propagator information *)
-				Export[FileNameJoin[{OutDir, StringTemplate["``.wl"][pn]}],
-					{
-						(*Internal=*)int,
-						(*External=*)ext,
-						(*Propagators=*)basis,
-						(*Replacements*)Thread[EnumSP[ext] -> EnumSP[ext, FCI@*SPD]]
-					}
-				];
-
-				(* 2. Prepare for FIRE *)
-				RunProcess[{"wolframscript", "-file", FileNameJoin[{pd, "prepareFIRE.wls"}], FIREHome, pn}, ProcessDirectory -> OutDir];
-
-				(* 3. Export FIRE configure file *)
-				Export[FileNameJoin[{OutDir, StringTemplate["``.config"][pn]}],
-					StringTemplate[
-"#threads `th`
-#variables d, `varList`
-#start
-#problem `no` `no`.start
-#integrals `no`.m
-#output `no`.tables
-"][<|
-	"th" -> Threads, 
-	"varList" -> StringRiffle[Complement[Variables@{EnumSP[ext, FCI@SPD], basis}, int, ext](*NOTE: To be tested here*), ", "], 
-	"no" -> pn
-|>],
-					"Text"
-				];
-
-				(* 4. Run FIRE *)
-				RunProcess[{FileNameJoin[{FIREHome, "bin/FIRE6"}], "-c", pn}, ProcessDirectory -> OutDir];
-
-				(* 5. Add to result *)
-				If[Not@NoOutput,
-					AppendTo[result, First@ParallelEvaluate[
-						Global`Tables2Rules[FileNameJoin[{OutDir, StringTemplate["``.tables"][pn]}], Factor],
-						ker,
-						DistributedContexts -> Automatic
-					]];
-				]
-
-				prog++;,
-				{pn, Length@basisGroups}
-			]
+		If[!ValueQ[subker] || FailureQ@Quiet@ParallelEvaluate[$KernelID, subker, DistributedContexts -> Automatic],
+			subker = First@LaunchKernels[1]
+		];
+		ParallelEvaluate[Get@FileNameJoin[{FIREHome, "FIRE6.m"}], subker, DistributedContexts -> Automatic];
+		
+		fileName = FileNameJoin[{OutDir, problemName <> ".tables"}];
+		
+		If[Not@FileExistsQ[fileName],
+			RunProcess[{FileNameJoin[{FIREHome, "bin/FIRE6"}], "-c", problemName}, ProcessDirectory -> OutDir];
 		];
 
-		(* Finish *)
-		CloseKernels[ker];
-		If[Not@NoOutput, result]
-	]
+		ParallelEvaluate[
+			Global`Tables2Rules[fileName, Factor] /. Global`G[_, {idx__}] :> Idx[idx],
+			subker,
+			DistributedContexts -> Automatic
+		]
+	]	
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*End*)
 
 
@@ -752,5 +732,95 @@ GroupSInt[sintList_List, int_List, ext_List, OptionsPattern[]] :=
 			]
 		];
 		{result, lookupTable}
+	]
+****)
+
+
+(****
+Options[RunFIRE] = {
+	FIREHome -> "/home/mozhewen/Documents/fire/FIRE6/",
+	Threads -> 8,
+	OutDir :> NotebookDirectory[],
+	NoOutput -> False,
+	InitialProblemNumber -> 1
+};
+
+RunFIRE[basisGroups_List, int_List, ext_List, op:OptionsPattern[]] := 
+	Module[{
+			FIREHome = OptionValue[FIREHome],
+			Threads = OptionValue[Threads],
+			OutDir = OptionValue[OutDir],
+			NoOutput = OptionValue[NoOutput],
+			InitialProblemNumber = OptionValue[InitialProblemNumber],
+			ker,
+			basis, idxList,
+			result = {}
+		},
+		(* Initialization *)
+		ker = LaunchKernels[1];
+		ParallelEvaluate[Get@FileNameJoin[{FIREHome, "FIRE6.m"}], ker, DistributedContexts -> Automatic];
+
+		DynamicModule[{prog = 0},
+			PrintTemporary@Row[{
+				ProgressIndicator[Dynamic[prog], {0, Length[basisGroups]}],
+				Dynamic[prog], "/", Length[basisGroups]
+			}];
+			Do[
+				basis = ExpandScalarProduct[basisGroups[[pn, 1]]] /. Pair[Momentum[a_, ___], Momentum[b_, ___]] :> a b;
+				idxList = basisGroups[[pn, 2]];
+				pn += InitialProblemNumber - 1;
+
+				(* 1.1. Export integral indices *)
+				Export[FileNameJoin[{OutDir, StringTemplate["``.m"][pn]}], {pn, #}&/@idxList];
+				(* 1.2. Export propagator information *)
+				Export[FileNameJoin[{OutDir, StringTemplate["``.wl"][pn]}],
+					{
+						(*Internal=*)int,
+						(*External=*)ext,
+						(*Propagators=*)basis,
+						(*Replacements*)Thread[EnumSP[ext] -> EnumSP[ext, FCI@*SPD]]
+					}
+				];
+
+				(* 2. Prepare for FIRE *)
+				RunProcess[{"wolframscript", "-file", FileNameJoin[{pd, "prepareFIRE.wls"}], FIREHome, pn}, ProcessDirectory -> OutDir];
+
+				(* 3. Export FIRE configure file *)
+				Export[FileNameJoin[{OutDir, StringTemplate["``.config"][pn]}],
+					StringTemplate[
+"#threads `th`
+#variables d, `varList`
+#start
+#problem `no` `no`.start
+#integrals `no`.m
+#output `no`.tables
+"][<|
+	"th" -> Threads, 
+	"varList" -> StringRiffle[Complement[Variables@{EnumSP[ext, FCI@SPD], basis}, int, ext](*NOTE: To be tested here*), ", "], 
+	"no" -> pn
+|>],
+					"Text"
+				];
+
+				(* 4. Run FIRE *)
+				RunProcess[{FileNameJoin[{FIREHome, "bin/FIRE6"}], "-c", pn}, ProcessDirectory -> OutDir];
+
+				(* 5. Add to result *)
+				If[Not@NoOutput,
+					AppendTo[result, First@ParallelEvaluate[
+						Global`Tables2Rules[FileNameJoin[{OutDir, StringTemplate["``.tables"][pn]}], Factor],
+						ker,
+						DistributedContexts -> Automatic
+					]];
+				]
+
+				prog++;,
+				{pn, Length@basisGroups}
+			]
+		];
+
+		(* Finish *)
+		CloseKernels[ker];
+		If[Not@NoOutput, result]
 	]
 ****)
