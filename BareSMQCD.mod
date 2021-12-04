@@ -65,21 +65,24 @@ M$CouplingMatrices = Join[
 
   (* Modified existing rules *)
   M$CouplingMatrices/.{
-    (*--- quark-quark ----------------------------------------------------- *)
-    ((c:C[ -F[3, {j1, o1}], F[3, {j2, o2}] ]) == rhs_) :> (
-      Echo[c] == I IndexDelta[o1, o2] *
-        { {0, 0, 0},
-          {0, 0, 0},
-          {0, - IndexDelta[j1, j2] dMf1[3, j1], - IndexDelta[j1, j2] dMf2[3, j1]},
-          {0, - IndexDelta[j1, j2] dMf1[3, j1], - IndexDelta[j1, j2] dMf2[3, j1]} }
-    ),
-
-    ((c:C[ -F[4, {j1, o1}], F[4, {j2, o2}] ]) == rhs_) :> (
+    (*--- quark-quark -----------------------------------------------------*)
+    ((c:C[ -F[gen: 3|4, {j1, o1}], F[gen_, {j2, o2}] ]) == rhs_) :> (
       c == I IndexDelta[o1, o2] *
         { {0, 0, 0},
           {0, 0, 0},
-          {0, - IndexDelta[j1, j2] dMf1[4, j1], - IndexDelta[j1, j2] dMf2[4, j1]},
-          {0, - IndexDelta[j1, j2] dMf1[4, j1], - IndexDelta[j1, j2] dMf2[4, j1]} }
+          {0, - IndexDelta[j1, j2] dMf1[gen, j1], - IndexDelta[j1, j2] dMf2[gen, j1]},
+          {0, - IndexDelta[j1, j2] dMf1[gen, j1], - IndexDelta[j1, j2] dMf2[gen, j1]} }
+    ),
+
+    (*--- For external Higgs vertex ---------------------------------------*)
+    ((c:C[ -F[gen: 3|4, {j1, o1}], F[gen_, {j2, o2}], S[1] ]) == rhs_) :> (
+      c == -I FCGV["EL"]/(2 FCGV["SW"] FCGV["MW"]) IndexDelta[o1, o2] *
+    	{ {Mass[F[gen, {j1}]] IndexDelta[j1, j2],
+           dMf1[gen, j1] IndexDelta[j1, j2],
+           dMf2[gen, j1] IndexDelta[j1, j2] },
+          {Mass[F[gen, {j1}]] IndexDelta[j1, j2],
+           dMf1[gen, j1] IndexDelta[j1, j2],
+           dMf2[gen, j1] IndexDelta[j1, j2] } }
     )
   },
 

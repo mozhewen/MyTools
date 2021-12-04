@@ -6,11 +6,18 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.10.17*)
+(*Last update: 2021.12.3*)
 
 
 (* ::Section:: *)
 (*Begin*)
+
+
+If[!ValueQ[Global`$FIREHome],
+	MyTools`$FIREHome = "/home/mozhewen/Documents/fire/FIRE6/",
+	MyTools`$FIREHome = Global`$FIREHome;
+	Remove[Global`$FIREHome]
+]
 
 
 BeginPackage["MyTools`", {"FeynCalc`"}];
@@ -22,23 +29,27 @@ ClearAll[EnumSP]
 ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
 
+ClearAll[\[CapitalOmega]]
+
 ClearAll[SInt]
 ClearAll[FC2SInt]
 ClearAll[FC2FIRE]
+ClearAll[Idx2SInt]
 
 ClearAll[\[Alpha]]
 ClearAll[UF]
+ClearAll[ZeroSIntQ]
 ClearAll[COrdering]
 ClearAll[AlphaStructure]
 ClearAll[GroupEquivSInt]
 ClearAll[Match2EquivSInt]
 ClearAll[GuessTrans]
-ClearAll[APOld, AP]
+ClearAll[AP]
 
 ClearAll[CompleteBasis]
 ClearAll[Idx]
 ClearAll[ExpressByBasis]
-ClearAll[GenFIREFile]
+ClearAll[GenFIREFiles]
 ClearAll[GetFIRETables]
 
 Begin["`Private`"]
@@ -159,6 +170,11 @@ LinearReduce[expr_, basis_List, lList_List] :=
 (*Functions that are used by user*)
 
 
+\[CapitalOmega]::usage =
+"\[CapitalOmega][d] is the surface area of a d-dimensional unit sphere. ";
+\[CapitalOmega][d_] := (2 \[Pi]^(d/2))/Gamma[d/2]
+
+
 (* ::Subsubsection:: *)
 (*Change representation*)
 
@@ -172,18 +188,29 @@ SInt[] = 1;  (* Trivial integral *)
 FC2SInt::usage =
 "FC2SInt[expr, lList] converts FeynCalc amplitudes expr with loop momenta in lList into the SInt[] \
 representation. Note that FC2SInt[] does not factor or expand numerators, it just recognizes the form \
-of the numerators of the input, which gives users the flexibility to set to the desired numerator form. ";
-FC2SInt[expr_, lList_List] := FeynAmpDenominatorCombine[expr] /.
+of the numerators of the input, which gives users the flexibility to set to the desired numerator form. 
+\"KeepOrder\" \[Rule] False | True
+    Whether to keep the order of propagators (they are sorted by default). ";
+Options[FC2SInt] = {
+	"KeepOrder" -> False
+};
+FC2SInt[expr_, lList_List, OptionsPattern[]] := FeynAmpDenominatorCombine[expr] /.
 	c_. Shortest[numer_.] denom_FeynAmpDenominator /; FreeQ[c, Alternatives@@lList] :>
 		c (Times@@Cases[#, {x_?(FreeQ[#, Alternatives@@lList]&), a_} :> ExpandScalarProduct[x^-a]] 
-		SInt@@Sort@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
+		SInt@@If[OptionValue["KeepOrder"] === True, Identity, Sort]@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
 			MapAt[Minus, FactorList[numer], {All, 2}] ~Join~ Tally@Cases[denom, x_PropagatorDenominator :> PropExplicit[x]]
 		]
 
 
 FC2FIRE::usage =
 "FC2FIRE[expr] converts the quadratic form expr in FeynCalc's Pair[] form into FIRE's Times[] form. ";
-FC2FIRE[expr_] := ExpandScalarProduct[expr] /. Pair[Momentum[a_, ___], Momentum[b_, ___]] :> a b
+FC2FIRE[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
+
+
+Idx2SInt::usage = 
+"Idx2SInt[basis, idxList] reconstructs SInt[] forms from idxList with respect to basis. "
+Idx2SInt[basis_List, idxList_List] := SInt@@DeleteCases[{basis, List@@#}\[Transpose], {_, 0}]& /@ idxList
+Idx2SInt[basis_List, idx_Idx] := First@Idx2SInt[basis, {idx}]
 
 
 (* ::Subsubsection:: *)
@@ -201,10 +228,19 @@ UF[sint_SInt, lList_List] :=
 		Q = List@@sint[[;;, 1]] . \[Alpha]List;
 		{c, b, A} = Coef012[Q, lList];
 		{
-			U = Det[A], 
+			U = Simplify@Det[A], 
 			(* NOTE: Tr[] has been redefined by FeynCalc. Use TensorContract instead. *)
-			(* F = *)1/4 TensorContract[ExpandScalarProduct[Adjoint[A] . Outer[Pair, b, b]], {1, 2}] - c U
+			(* F = *)Simplify[1/4 TensorContract[ExpandScalarProduct[Adjoint[A] . Outer[Pair, b, b]], {1, 2}] - c U]
 		}
+	]
+
+
+ZeroSIntQ::usage = 
+"ZeroSIntQ[sint, lList] determines whether sint is a zero integral. ";
+ZeroSIntQ[sint_SInt, lList_List, op:OptionsPattern[]] :=
+	Module[{U, F},
+		{U, F} = UF[Replace[sint, {_, 0} -> Sequence], lList];
+		If[U F === 0, True, False]
 	]
 
 
@@ -240,7 +276,7 @@ of sint for the maximal canonical order is listed in arr.
 Options[AlphaStructure] = {
 	"SectorOnly" -> False
 };
-AlphaStructure[sint_SInt, lList_List, OptionsPattern[]]:=
+AlphaStructure[sint_SInt, lList_List, OptionsPattern[]] :=
 	Module[{SectorOnly = OptionValue["SectorOnly"],
 			U, F, \[Alpha]List, a, co},
 		{U, F} = UF[sint, lList]; 
@@ -349,62 +385,6 @@ GuessTrans[src_List, dest_List, lList_List] :=
 	]
 
 
-APOld::usage =
-"AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
-\"eps\" \[Rule] None | ...
-    The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
-For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
-value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final result.
-\"Ieps\" \[Rule] Plus | Minus
-    Sign of \[ImaginaryI] \[Epsilon]. If left default, Plus is used. 
-\"A\" \[Rule] Plus | Minus
-    Whether A is positive | negative definite (assumed to be). If left default, It is set \
-to If[Euclidean, Minus, Identity]@*Ieps. 
-\"Denom\" \[Rule] Plus | Minus
-    Sign inside the denominator of the result. If left default, Plus is used. ";
-Options[APOld] = {
-	"Euclidean" -> False,
-	"eps" -> None,
-	"Ieps" -> Plus,
-	"A" -> Undefined,
-	"Denom" -> Plus
-};
-APOld[sint_SInt, lList_List, d_, OptionsPattern[]] :=
-	Module[{sgnIeps, sgnA, sgnDenom,
-			Q, \[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
-			a, h = Length[lList],
-			A, b, c,
-			Q1},
-		sgnIeps = OptionValue["Ieps"]; sgnDenom = OptionValue["Denom"];
-		If[OptionValue["A"] === Undefined,
-			sgnA = If[OptionValue["Euclidean"], Minus, Identity]@*sgnIeps,
-			sgnA = OptionValue["A"]
-		];
-		
-		Q = (List@@sint[[;;, 1]] + If[OptionValue["eps"] === None, 0, sgnIeps[I OptionValue["eps"]]]) . \[Alpha]List;
-		a = List@@sint[[;;, 2]];
-
-		{c, b, A} = Echo@Coef012[Q, lList];
-		Q1 = sgnDenom[1/4 TensorContract[ExpandScalarProduct[Inverse[A] . Outer[Pair, b, b]], {1, 2}] - c];
-		<|
-			"integrand" -> Simplify[
-				((sgnA[1]^h Det[A])^(-d/2) Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[sint]}])/Q1^(Total[a]-d h/2),
-				Assumptions -> AllTrue[\[Alpha]List, # > 0 &]
-			],
-			"coef" -> Simplify[Times[
-				Power[I,
-					sgnIeps[-Total[a]
-						+sgnA[If[OptionValue["Euclidean"], d h/2, h-d h/2]]
-						+sgnDenom[-Total[a] + d h/2]
-					]
-				],
-				\[Pi]^(d h/2) Gamma[Total[a] - d h/2]/Times@@(Gamma/@a)
-			]]
-		|>
-	]
-
-
-(* To be tested *)
 AP::usage =
 "AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
 \"eps\" \[Rule] None | ...
@@ -417,18 +397,21 @@ value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final r
     Whether A is positive | negative definite (assumed to be). If left default, It is set \
 to If[Euclidean, Minus, Identity]@*Ieps. 
 \"Denom\" \[Rule] Plus | Minus
-    Sign inside the denominator of the result. If left default, Plus is used. ";
+    Sign inside the denominator of the result. If left default, Plus is used. 
+\"SeparateIntegrand\" -> True | False
+	Wheher to separate the integrand into three factors: {Mellin part, U part, F part}. Default is False. ";
 Options[AP] = {
 	"Euclidean" -> False,
 	"eps" -> None,
 	"Ieps" -> Plus,
 	"A" -> Undefined,
-	"Denom" -> Plus
+	"Denom" -> Plus,
+	"SeparateIntegrand" -> False
 };
 AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 	Module[{sgnIeps, sgnA, sgnDenom,
 			a, Ta, L = Length[lList],
-			U, F},
+			U, F, pow},
 		sgnIeps = OptionValue["Ieps"]; sgnDenom = OptionValue["Denom"];
 		If[OptionValue["A"] === Undefined,
 			sgnA = If[OptionValue["Euclidean"], Minus, Identity]@*sgnIeps,
@@ -443,10 +426,11 @@ AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 			lList
 		];
 		<|
-			"integrand" -> Simplify[Times[
-				Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[sint]}],
-				(sgnA[1]^L U)^(Ta - d (L+1)/2),
-				(sgnA[1]^L sgnDenom[F])^(d L/2 - Ta)
+			"integrand" -> Simplify[
+				If[OptionValue["SeparateIntegrand"] === True, pow=List; List, pow=Power; Times][
+					Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[sint]}],
+					pow[(sgnA[1]^L U), (Ta - d (L+1)/2)],
+					pow[(sgnA[1]^L sgnDenom[F]), (d L/2 - Ta)]
 				],
 				Assumptions -> AllTrue[Table[Subscript[\[Alpha], i], {i, Length[sint]}], # > 0 &]
 			],
@@ -505,9 +489,10 @@ Options[ExpressByBasis] = {
 ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 	Module[{AllMatches = OptionValue["AllMatches"],
 			ShowProgress = OptionValue["ShowProgress"],
+			basisI = FCI[basis],
 			sint, denomPos, denom, numer, b, bList, word, lrules, 
 			rt, idx, rs, result},
-		bList = Array[b, Length[basis]];
+		bList = Array[b, Length[basisI]];
 		DynamicModule[{prog = 0},
 			If[ShowProgress === True,
 				PrintTemporary@Row[{
@@ -520,15 +505,15 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 				denomPos = Flatten@Position[sint, {_, a_/;a>0}, {1}, Heads -> False];
 				denom = sint[[denomPos]];
 				Catch@Do[
-					rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, SectorOnly -> True];
+					rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basisI[[can]])), lList, SectorOnly -> True];
 					rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];
 					Do[
 						(* Deal with the denominator *)
-						idx = Table[0, Length[basis]];
+						idx = Table[0, Length[basisI]];
 						idx[[can]] = List@@denom[[arrDenom, 2]];
 
 						(* Deal with the numerator *)
-						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basis[[can]], lList];
+						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basisI[[can]], lList];
 						If[lrules === Null && Count[sint, {_, a_Integer/;a<0}] > 0 (* Non-trivial numerator *), 
 							Message[ExpressByBasis::guessfail, prog+1, denomPos[[arrDenom]], can]; 
 							Continue[]
@@ -536,7 +521,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 							(* No numerator (numer = 1) *)
 						];
 						numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
-							(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basis, lList]
+							(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basisI, lList]
 						)]];
 						word = Join[{Expand@Last[#1]}, First[#1]]&/@CoefficientRules[numer, bList];
 						AppendTo[rs, {
@@ -548,7 +533,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 						{arrDenom, If[AllMatches === True, rt, {First[rt, Nothing]}]}
 					]
 					,
-					{can, Subsets[Range@Length[basis], {Length[denom]}]}
+					{can, Subsets[Range@Length[basisI], {Length[denom]}]}
 				]; 
 				prog++;
 				(*Return*)If[AllMatches === True, rs, First[rs, Null]],
@@ -559,28 +544,30 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 	]
 
 
-Options[GenFIREFile] = {
-	"FIREHome" -> "/home/mozhewen/Documents/fire/FIRE6/",
+GenFIREFiles::usage = 
+"GenFIREFiles[pn, problemName, basis, idxList, internal, external]";
+Options[GenFIREFiles] = {
 	"Threads" -> 8,
 	"Preferred" -> {},
 	"OutDir" :> NotebookDirectory[]
 };
 
-GenFIREFile[pn_Integer, problemName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
+GenFIREFiles[pn_Integer, problemName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
 	Module[{
-			FIREHome = OptionValue["FIREHome"],
 			Threads = OptionValue["Threads"],
 			Preferred = OptionValue["Preferred"],
 			OutDir = OptionValue["OutDir"],
-			basisF = FC2FIRE[basis]
+			basisF = FC2FIRE[basis],
+			fileName
 		},
 
-		(* 1.1. Export integral indices *)
+		(* 1. Export integral indices *)
 		Export[FileNameJoin[{OutDir, StringTemplate["``.wl"][problemName]}], {pn, List@@#}&/@idxList];
 		If[Preferred =!= {},
 			Export[FileNameJoin[{OutDir, StringTemplate["``.preferred"][problemName]}], {pn, List@@#}&/@Preferred, "WL"];
 		];
-		(* 1.2. Export propagator information *)
+
+		(* 2. Export propagator information *)
 		Export[FileNameJoin[{OutDir, StringTemplate["``_defs.wl"][problemName]}],
 			{
 				(*Internal=*)int,
@@ -590,10 +577,10 @@ GenFIREFile[pn_Integer, problemName_String, basis_List, idxList_List, int_List, 
 			}
 		];
 
-		(* 2. Prepare for FIRE *)
-		RunProcess[{"wolframscript", "-file", FileNameJoin[{pd, "prepareFIRE.wls"}], FIREHome, problemName}, ProcessDirectory -> OutDir];
+		(* 3. Prepare for FIRE *)
+		RunProcess[{"wolframscript", "-file", FileNameJoin[{pd, "prepareFIRE.wls"}], $FIREHome, problemName}, ProcessDirectory -> OutDir];
 
-		(* 3. Export FIRE configure file *)
+		(* 4. Export FIRE configure file *)
 		Export[FileNameJoin[{OutDir, StringTemplate["``.config"][problemName]}],
 			StringTemplate[
 "#threads `th`
@@ -612,30 +599,40 @@ GenFIREFile[pn_Integer, problemName_String, basis_List, idxList_List, int_List, 
 |>],
 			"Text"
 		];
+
+		(* 5. Delete obselete table file *)
+		fileName = FileNameJoin[{OutDir, problemName <> ".tables"}];
+		If[FileExistsQ[fileName], DeleteFile[fileName]];
 	]
 
 
+GetFIRETables::usage = 
+"GetFIRETables[problemName]";
+CloseKernels[subker];
 ClearAll[subker]
 Options[GetFIRETables] = {
-	"FIREHome" -> "/home/mozhewen/Documents/fire/FIRE6/",
 	"OutDir" :> NotebookDirectory[]
 };
 
 GetFIRETables[problemName_String, OptionsPattern[]] := 
 	Module[{
-			FIREHome = OptionValue["FIREHome"],
 			OutDir = OptionValue["OutDir"],
-			fileName
+			fileName, status
 		},
 		If[!ValueQ[subker] || FailureQ@Quiet@ParallelEvaluate[$KernelID, subker, DistributedContexts -> Automatic],
 			subker = First@LaunchKernels[1]
 		];
-		ParallelEvaluate[Get@FileNameJoin[{FIREHome, "FIRE6.m"}], subker, DistributedContexts -> Automatic];
+		ParallelEvaluate[Get@FileNameJoin[{$FIREHome, "FIRE6.m"}], subker, DistributedContexts -> Automatic];
 		
 		fileName = FileNameJoin[{OutDir, problemName <> ".tables"}];
 		
 		If[Not@FileExistsQ[fileName],
-			RunProcess[{FileNameJoin[{FIREHome, "bin/FIRE6"}], "-c", problemName}, ProcessDirectory -> OutDir];
+			status = RunProcess[{FileNameJoin[{$FIREHome, "bin/FIRE6"}], "-c", problemName}, ProcessDirectory -> OutDir];
+			If[status["ExitCode"] =!= 0, 
+				Return[Failure["FIRE6 error",
+					<|"MessageTemplate" -> status["StandardError"]|>
+				]]
+			]
 		];
 
 		ParallelEvaluate[
@@ -822,5 +819,62 @@ RunFIRE[basisGroups_List, int_List, ext_List, op:OptionsPattern[]] :=
 		(* Finish *)
 		CloseKernels[ker];
 		If[Not@NoOutput, result]
+	]
+****)
+
+
+(****
+APOld::usage =
+"AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
+\"eps\" \[Rule] None | ...
+    The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
+For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
+value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final result.
+\"Ieps\" \[Rule] Plus | Minus
+    Sign of \[ImaginaryI] \[Epsilon]. If left default, Plus is used. 
+\"A\" \[Rule] Plus | Minus
+    Whether A is positive | negative definite (assumed to be). If left default, It is set \
+to If[Euclidean, Minus, Identity]@*Ieps. 
+\"Denom\" \[Rule] Plus | Minus
+    Sign inside the denominator of the result. If left default, Plus is used. ";
+Options[APOld] = {
+	"Euclidean" -> False,
+	"eps" -> None,
+	"Ieps" -> Plus,
+	"A" -> Undefined,
+	"Denom" -> Plus
+};
+APOld[sint_SInt, lList_List, d_, OptionsPattern[]] :=
+	Module[{sgnIeps, sgnA, sgnDenom,
+			Q, \[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
+			a, h = Length[lList],
+			A, b, c,
+			Q1},
+		sgnIeps = OptionValue["Ieps"]; sgnDenom = OptionValue["Denom"];
+		If[OptionValue["A"] === Undefined,
+			sgnA = If[OptionValue["Euclidean"], Minus, Identity]@*sgnIeps,
+			sgnA = OptionValue["A"]
+		];
+		
+		Q = (List@@sint[[;;, 1]] + If[OptionValue["eps"] === None, 0, sgnIeps[I OptionValue["eps"]]]) . \[Alpha]List;
+		a = List@@sint[[;;, 2]];
+
+		{c, b, A} = Echo@Coef012[Q, lList];
+		Q1 = sgnDenom[1/4 TensorContract[ExpandScalarProduct[Inverse[A] . Outer[Pair, b, b]], {1, 2}] - c];
+		<|
+			"integrand" -> Simplify[
+				((sgnA[1]^h Det[A])^(-d/2) Product[Subscript[\[Alpha], i]^(a[[i]]-1), {i, Length[sint]}])/Q1^(Total[a]-d h/2),
+				Assumptions -> AllTrue[\[Alpha]List, # > 0 &]
+			],
+			"coef" -> Simplify[Times[
+				Power[I,
+					sgnIeps[-Total[a]
+						+sgnA[If[OptionValue["Euclidean"], d h/2, h-d h/2]]
+						+sgnDenom[-Total[a] + d h/2]
+					]
+				],
+				\[Pi]^(d h/2) Gamma[Total[a] - d h/2]/Times@@(Gamma/@a)
+			]]
+		|>
 	]
 ****)
