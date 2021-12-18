@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.12.3*)
+(*Last update: 2021.12.19*)
 
 
 (* ::Section:: *)
@@ -305,9 +305,9 @@ AlphaStructure[sint_SInt, lList_List, OptionsPattern[]] :=
 GroupEquivSInt::usage = 
 "GroupEquivSInt[sintList, lList] groups equivalent scalar integrals in sintList. It returns \
 {groups, lookupTable} where each item of lookupTable is of the form {{igroup, ipos}, arr} with \
-igroup the group index and ipos the index inside this group, arr is the arrangement of propagators \
-that meet the maximal canonical order in \[Alpha]-representation. If a scalar integral is zero, its arr \
-will be set to Null. 
+igroup the group index and ipos the index inside this group, arr is one of the arrangements of \
+propagators that meet the maximal canonical order in \[Alpha]-representation. If a scalar integral is \
+zero, its arr will be set to Null. 
 \"SectorOnly\" \[Rule] False | True
     Whether determine the equivalency only in the sense of sector (whether powers are irrelevant). ";
 Options[GroupEquivSInt] = {
@@ -355,6 +355,7 @@ Match2EquivSInt[src_SInt, dest_SInt, lList_List, OptionsPattern[]] :=
 		alphaStructSrc = AlphaStructure[src, lList, "SectorOnly" -> OptionValue["SectorOnly"]];
 
 		If[alphaStructSrc[[1]] === alphaStructDest[[1]] && Length[alphaStructDest[[2, 1]]] === Length[alphaStructSrc[[2, 1]]],
+			Assert[Length[alphaStructSrc[[2]]] == Length[alphaStructDest[[2]]]]; (* The number of ways to rearrange src and dest should be the same. *)
 			temp = Table[0, Length[alphaStructDest[[2, 1]]]];
 			(temp[[alphaStructDest[[2, 1]]]] = #; temp)& /@ alphaStructSrc[[2]]
 		,(*Else*)
@@ -365,17 +366,19 @@ Match2EquivSInt[src_SInt, dest_SInt, lList_List, OptionsPattern[]] :=
 
 GuessTrans::usage =
 "GuessTrans[src, dest, lList] tries to transform a list of quadratic forms src to the corresponding \
-dest by a linear transformation of loop momenta in lList. ";
+dest by a linear transformation of loop momenta in lList. It's assumed that src and dest can match, \
+otherwise it may not give correct answers. ";
 GuessTrans[src_List, dest_List, lList_List] := 
 	Module[{n = Length[lList], cList, rule, d, eq, coef, sln},
 		(* Only select those with Jacobian = \[PlusMinus]1 *)
 		cList = Select[Partition[#, n]& /@ Tuples[{-1, 0, 1}, n^2], Abs@Det[#] === 1 &];
 		Do[
-			rule = Table[lList[[i]] -> Sum[c[[i, j]] lList[[j]], {j, n}] + d[i], {i, n}];
-			eq = (FC2FIRE[src] /. rule) - FC2FIRE[dest];
+			rule = Table[lList[[i]] -> Sum[c[[i, j]]lList[[j]], {j, n}] + d[i], {i, n}];
+			eq = (FC2FIRE[src]/.rule) - FC2FIRE[dest];
 			coef = CoefficientArrays[eq, lList];
 			If[AllTrue[coef[[3]], # === 0&, 3],
 				sln = Solve[coef[[2]] == 0, Array[d, n]];
+				(* coef\[LeftDoubleBracket]1\[RightDoubleBracket] is deemed to be zeros if src and dest match. *)
 				If[sln =!= {},
 					Return[Expand[rule/.First@sln]]
 				]
@@ -489,13 +492,14 @@ Options[ExpressByBasis] = {
 ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 	Module[{AllMatches = OptionValue["AllMatches"],
 			ShowProgress = OptionValue["ShowProgress"],
+			printcell,
 			basisI = FCI[basis],
 			sint, denomPos, denom, numer, b, bList, word, lrules, 
 			rt, idx, rs, result},
 		bList = Array[b, Length[basisI]];
 		DynamicModule[{prog = 0},
 			If[ShowProgress === True,
-				PrintTemporary@Row[{
+				printcell = PrintTemporary@Row[{
 					ProgressIndicator[Dynamic[prog], {0, Length[sintList]}],
 					Dynamic[prog], "/", Length[sintList]
 				}];
@@ -513,16 +517,19 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 						idx[[can]] = List@@denom[[arrDenom, 2]];
 
 						(* Deal with the numerator *)
-						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basisI[[can]], lList];
-						If[lrules === Null && Count[sint, {_, a_Integer/;a<0}] > 0 (* Non-trivial numerator *), 
-							Message[ExpressByBasis::guessfail, prog+1, denomPos[[arrDenom]], can]; 
-							Continue[]
-						(*Else*)
-							(* No numerator (numer = 1) *)
+						If[Count[sint, {_, a_Integer/;a<0}] > 0 (* Non-trivial numerator *), 
+							lrules = GuessTrans[List@@denom[[arrDenom, 1]], basisI[[can]], lList];
+							If[lrules === Null,
+								Message[ExpressByBasis::guessfail, prog+1, denomPos[[arrDenom]], can]; 
+								Continue[];
+							];
+							numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
+								(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basisI, lList]
+							)]];
+						,(*Else*) (* No numerator (numer = 1) *)
+							numer = 1;
 						];
-						numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
-							(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basisI, lList]
-						)]];
+
 						word = Join[{Expand@Last[#1]}, First[#1]]&/@CoefficientRules[numer, bList];
 						AppendTo[rs, {
 							Sum[mono[[1]]Idx@@(idx - mono[[2;;]]), {mono, word}],
@@ -530,7 +537,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 						}];
 						If[AllMatches === False, Throw[Null]];
 						,
-						{arrDenom, If[AllMatches === True, rt, {First[rt, Nothing]}]}
+						{arrDenom, rt}
 					]
 					,
 					{can, Subsets[Range@Length[basisI], {Length[denom]}]}
@@ -540,6 +547,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 				{sint, sintList}
 			];
 		];
+		If[ShowProgress === True, NotebookDelete[printcell]];
 		(*Return*)result
 	]
 
@@ -651,7 +659,7 @@ End[]
 EndPackage[]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Unused*)
 
 
