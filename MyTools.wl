@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.12.19*)
+(*Last update: 2021.12.27*)
 
 
 (* ::Section:: *)
@@ -35,6 +35,8 @@ ClearAll[SInt]
 ClearAll[FC2SInt]
 ClearAll[FC2FIRE]
 ClearAll[Idx2SInt]
+
+ClearAll[DisplaySInt]
 
 ClearAll[\[Alpha]]
 ClearAll[UF]
@@ -211,6 +213,44 @@ Idx2SInt::usage =
 "Idx2SInt[basis, idxList] reconstructs SInt[] forms from idxList with respect to basis. "
 Idx2SInt[basis_List, idxList_List] := SInt@@DeleteCases[{basis, List@@#}\[Transpose], {_, 0}]& /@ idxList
 Idx2SInt[basis_List, idx_Idx] := First@Idx2SInt[basis, {idx}]
+
+
+(* ::Subsubsection:: *)
+(*Typesetting*)
+
+
+ClearAll[SinglePropBox]
+SinglePropBox[prop_, a_] :=
+	If[a===1,
+		If[Head[prop]=!=Plus && Head[prop]=!=Times,
+			prop,
+			RowBox[{"(", prop, ")"}]
+		]
+	,(*Else*)
+		SuperscriptBox[RowBox[{"(", prop, ")"}], a]
+	]
+
+
+Options[DisplaySInt] = {
+	"d" -> "d"
+};
+DisplaySInt::usage =
+"DisplaySInt[expr, lList] displays SInt[...] in expr with loop momenta in lList in a 2D math form. "
+DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
+	expr/.sint_SInt :> Module[{
+			numer = Cases[sint, {prop_, a_/;a<0} :> {prop, -a}],
+			denom = Cases[sint, {_, a_/;(a<0)=!=True}]
+		},
+		DisplayForm[
+			RowBox[{"\[Integral]", FractionBox[
+				RowBox[Join[
+					Riffle[lList, SuperscriptBox["\[DifferentialD]", OptionValue["d"]], {1, -2, 2}],
+					Replace[SinglePropBox@@@numer, {ent__}:>{Style["\[Times]", Gray], ent}]
+				]],
+				RowBox[SinglePropBox@@@denom]
+			]}]
+		]
+	]
 
 
 (* ::Subsubsection:: *)
@@ -553,7 +593,9 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 
 
 GenFIREFiles::usage = 
-"GenFIREFiles[pn, problemName, basis, idxList, internal, external]";
+"GenFIREFiles[pn, problemName, basis, idxList, internal, external] generates the requisite files for the IBP \
+reduction in the C++ version of FIRE6. pn is the internal problem number of FIRE6 which can be set arbitrarily \
+under normal circumstances. ";
 Options[GenFIREFiles] = {
 	"Threads" -> 8,
 	"Preferred" -> {},
@@ -615,7 +657,8 @@ GenFIREFiles[pn_Integer, problemName_String, basis_List, idxList_List, int_List,
 
 
 GetFIRETables::usage = 
-"GetFIRETables[problemName]";
+"GetFIRETables[problemName] gets the result tables of FIRE6 corresponding to problemName. If the *.tables file \
+does not exist, the C++ version of FIRE6 will be executed by this function. ";
 CloseKernels[subker];
 ClearAll[subker]
 Options[GetFIRETables] = {
