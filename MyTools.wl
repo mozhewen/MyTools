@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.12.27*)
+(*Last update: 2021.12.30*)
 
 
 (* ::Section:: *)
@@ -199,7 +199,7 @@ Options[FC2SInt] = {
 FC2SInt[expr_, lList_List, OptionsPattern[]] := FeynAmpDenominatorCombine[expr] /.
 	c_. Shortest[numer_.] denom_FeynAmpDenominator /; FreeQ[c, Alternatives@@lList] :>
 		c (Times@@Cases[#, {x_?(FreeQ[#, Alternatives@@lList]&), a_} :> ExpandScalarProduct[x^-a]] 
-		SInt@@If[OptionValue["KeepOrder"] === True, Identity, Sort]@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
+		SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
 			MapAt[Minus, FactorList[numer], {All, 2}] ~Join~ Tally@Cases[denom, x_PropagatorDenominator :> PropExplicit[x]]
 		]
 
@@ -210,9 +210,15 @@ FC2FIRE[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
 
 
 Idx2SInt::usage = 
-"Idx2SInt[basis, idxList] reconstructs SInt[] forms from idxList with respect to basis. "
-Idx2SInt[basis_List, idxList_List] := SInt@@DeleteCases[{basis, List@@#}\[Transpose], {_, 0}]& /@ idxList
-Idx2SInt[basis_List, idx_Idx] := First@Idx2SInt[basis, {idx}]
+"Idx2SInt[basis, idxList] reconstructs SInt[] forms from idxList with respect to basis. 
+\"KeepOrder\" \[Rule] False | True
+    Whether to keep the order of propagators (they are sorted by default). ";
+Options[Idx2SInt] = {
+	"KeepOrder" -> False
+};
+Idx2SInt[basis_List, idxList_List, OptionsPattern[]] := 
+	(SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@DeleteCases[{basis, List@@#}\[Transpose], {_, 0}]&) /@ idxList
+Idx2SInt[basis_List, idx_Idx, op:OptionsPattern[]] := First@Idx2SInt[basis, {idx}, op]
 
 
 (* ::Subsubsection:: *)
@@ -590,6 +596,8 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 		If[ShowProgress === True, NotebookDelete[printcell]];
 		(*Return*)result
 	]
+	
+ExpressByBasis[sint_SInt, basis_List, lList_List, op:OptionsPattern[{"ShowProgress" -> False}]] := First@ExpressByBasis[{sint}, basis, lList, op]
 
 
 GenFIREFiles::usage = 
