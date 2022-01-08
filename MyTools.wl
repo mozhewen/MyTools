@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.12.30*)
+(*Last update: 2022.1.9*)
 
 
 (* ::Section:: *)
@@ -414,22 +414,25 @@ GuessTrans::usage =
 "GuessTrans[src, dest, lList] tries to transform a list of quadratic forms src to the corresponding \
 dest by a linear transformation of loop momenta in lList. It's assumed that src and dest can match, \
 otherwise it may not give correct answers. ";
+GuessTrans::notone = "Rule `` found but Jacobian is not one. ";
 GuessTrans[src_List, dest_List, lList_List] := 
-	Module[{n = Length[lList], cList, rule, d, eq, coef, sln},
-		(* Only select those with Jacobian = \[PlusMinus]1 *)
-		cList = Select[Partition[#, n]& /@ Tuples[{-1, 0, 1}, n^2], Abs@Det[#] === 1 &];
+	Module[{n = Length[lList], c, cList, d, rule, eq, coef, sln4c, sln4d, rs},
+		cList = Flatten@Array[c, {n, n}];
+		rule = Table[lList[[i]] -> Sum[c[i, j]lList[[j]], {j, n}] + d[i], {i, n}];
+		eq = (FC2FIRE[src]/.rule) - FC2FIRE[dest];
+		coef = Normal@CoefficientArrays[eq, lList];
+		sln4c = Solve[Join[Flatten[coef[[3]]], #(#^2-1)&/@cList] == 0, cList];
 		Do[
-			rule = Table[lList[[i]] -> Sum[c[[i, j]]lList[[j]], {j, n}] + d[i], {i, n}];
-			eq = (FC2FIRE[src]/.rule) - FC2FIRE[dest];
-			coef = CoefficientArrays[eq, lList];
-			If[AllTrue[coef[[3]], # === 0&, 3],
-				sln = Solve[coef[[2]] == 0, Array[d, n]];
-				(* coef\[LeftDoubleBracket]1\[RightDoubleBracket] is deemed to be zeros if src and dest match. *)
-				If[sln =!= {},
-					Return[Expand[rule/.First@sln]]
-				]
+			sln4d = Solve[coef[[2]] == 0 /. onesln4c, Array[d, n]];
+			(* coef\[LeftDoubleBracket]1\[RightDoubleBracket] is deemed to be zeros if src and dest match. *)
+			If[sln4d =!= {},
+				rs = Expand[rule/.onesln4c/.First@sln4d];
+				If[Abs@Det[Array[c, {n, n}]/.onesln4c] =!= 1, 
+					Message[GuessTrans::notone, rs]; Return[]
+				];
+				Return[rs]
 			],
-			{c, cList}
+			{onesln4c, sln4c}
 		]
 	]
 
@@ -935,5 +938,31 @@ APOld[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 				\[Pi]^(d h/2) Gamma[Total[a] - d h/2]/Times@@(Gamma/@a)
 			]]
 		|>
+	]
+****)
+
+
+(****
+GuessTransOld::usage =
+"GuessTrans[src, dest, lList] tries to transform a list of quadratic forms src to the corresponding \
+dest by a linear transformation of loop momenta in lList. It's assumed that src and dest can match, \
+otherwise it may not give correct answers. ";
+GuessTransOld[src_List, dest_List, lList_List] := 
+	Module[{n = Length[lList], cList, rule, d, eq, coef, sln},
+		(* Only select those with Jacobian = \[PlusMinus]1 *)
+		cList = Select[Partition[#, n]& /@ Tuples[{-1, 0, 1}, n^2], Abs@Det[#] === 1 &];
+		Do[
+			rule = Table[lList[[i]] -> Sum[c[[i, j]]lList[[j]], {j, n}] + d[i], {i, n}];
+			eq = (FC2FIRE[src]/.rule) - FC2FIRE[dest];
+			coef = CoefficientArrays[eq, lList];
+			If[AllTrue[coef[[3]], # === 0&, 3],
+				sln = Solve[coef[[2]] == 0, Array[d, n]];
+				(* coef\[LeftDoubleBracket]1\[RightDoubleBracket] is deemed to be zeros if src and dest match. *)
+				If[sln =!= {},
+					Return[Expand[rule/.First@sln]]
+				]
+			],
+			{c, cList}
+		]
 	]
 ****)
