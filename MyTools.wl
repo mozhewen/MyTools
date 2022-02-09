@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2022.1.9*)
+(*Last update: 2022.2.9*)
 
 
 (* ::Section:: *)
@@ -210,15 +210,14 @@ FC2FIRE[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
 
 
 Idx2SInt::usage = 
-"Idx2SInt[basis, idxList] reconstructs SInt[] forms from idxList with respect to basis. 
+"Idx2SInt[expr, basis] reconstructs SInt[] forms from Idx[] expression expr with respect to basis. 
 \"KeepOrder\" \[Rule] False | True
     Whether to keep the order of propagators (they are sorted by default). ";
 Options[Idx2SInt] = {
 	"KeepOrder" -> False
 };
-Idx2SInt[basis_List, idxList_List, OptionsPattern[]] := 
-	(SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@DeleteCases[{basis, List@@#}\[Transpose], {_, 0}]&) /@ idxList
-Idx2SInt[basis_List, idx_Idx, op:OptionsPattern[]] := First@Idx2SInt[basis, {idx}, op]
+Idx2SInt[expr_, basis_List, OptionsPattern[]] := expr /. Idx[idx__] :> 
+	SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@DeleteCases[{basis, {idx}}\[Transpose], {_, 0}]
 
 
 (* ::Subsubsection:: *)
@@ -529,9 +528,10 @@ Idx::usage = "Idx[a1, a2, ] represents the indices of propagators in a specific 
 
 
 ExpressByBasis::usage =
-"ExpressByBasis[SIntList, basis, lList] tries to express the propagators of scalar integrals in SIntList \
+"ExpressByBasis[sintList, basis, lList] tries to express the propagators of scalar integrals in sintList \
 with respect to basis in the sense of change of variables of loop momenta. The numerators (with negative \
-indices) are automatically expanded as linear combinations of basis. ";
+indices) are automatically expanded as linear combinations of basis. 
+ExpressByBasis[sint, basis, lList] express single scalar integral sint. ";
 ExpressByBasis::guessfail = "Failed to derive momentum transformation rules for scalar integral i = `` \
 with propagator \[Rule] basis arrangement = `` \[Rule] ``. "
 Options[ExpressByBasis] = {
@@ -582,7 +582,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 						word = Join[{Expand@Last[#1]}, First[#1]]&/@CoefficientRules[numer, bList];
 						AppendTo[rs, {
 							Sum[mono[[1]]Idx@@(idx - mono[[2;;]]), {mono, word}],
-							arrDenom -> can
+							denomPos[[arrDenom]] -> can
 						}];
 						If[AllMatches === False, Throw[Null]];
 						,
