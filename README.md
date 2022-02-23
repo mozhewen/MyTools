@@ -38,7 +38,7 @@ ParallelEvaluate[
 
 ## File Description
 
-  * `MyTools.wl`
+* `MyTools.wl`
 
     Source code of the main package. 
 
@@ -54,12 +54,14 @@ ParallelEvaluate[
 
   Utility functions for calculating Feynman integrals using the AMFlow package. 
 
-* `BareSMQCD.mod`
+* `assets/`
 
-  Modified version of `SMQCD.mod` to generate counter-terms (up to two loops) that are derived from the bare perturbation theory. 
+  * `BareSMQCD.mod`
 
-  **Note that** only the quark-quark vertex in the model `SM.mod` is revised. The rest electroweak vertices in `SM.mod` are unchanged (e.g., There are still wave function RCs in the quark-quark-photon vertex). So one should use this file with care. 
+    Modified version of `SMQCD.mod` to generate counter-terms (up to two loops) that are derived from the bare perturbation theory. 
 
-* `UnitarySMQCD.mod`
+    **Note that** only the quark-quark vertex in the model `SM.mod` is revised. The rest electroweak vertices in `SM.mod` are unchanged (e.g., There are still wave function RCs in the quark-quark-photon vertex). So one should use this file with care. 
 
-  Modified version of `UnitarySM.mod` to keep the ghost field for gluon. 
+  * `UnitarySMQCD.mod`
+
+    Modified version of `UnitarySM.mod` to keep the ghost field for gluon. 
