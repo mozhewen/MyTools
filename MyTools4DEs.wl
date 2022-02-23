@@ -6,7 +6,10 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2021.10.17*)
+(*TODO: *)
+(*	1. Check that PD[] supports expressions with symbolic power. *)
+(**)
+(*Last update: 2022.2.19*)
 
 
 (* ::Section:: *)
@@ -22,10 +25,12 @@ If[!ValueQ[Global`$FIREHome],
 
 BeginPackage["MyTools4DEs`", {"LiteRed`", "Libra`"}];
 
-ClearAll[EnumSP]
+Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]];
 
-ClearAll[Idx]
-ClearAll[PD]
+ClearAll[Plain2LR]
+ClearAll[SPExpand]
+ClearAll[PD, PD2]
+
 ClearAll[GenFIREFile]
 ClearAll[RunFIRE]
 
@@ -40,23 +45,35 @@ Begin["`Private`"]
 pd = DirectoryName[$InputFileName];
 
 
-EnumSP::usage =
-"EnumSP[kList, sp] gives all scalar products of momenta in kList. The function used to represent scalar \
-products are defined by sp. ";
-EnumSP[kList_List, sp_:Times] := sp@@@DeleteDuplicates[Tuples[kList, 2], ContainsExactly]
+(* ::Subsection:: *)
+(*Utilities*)
 
 
-Idx::usage = "Idx[a1, a2, ] represents the indices of propagators in a specific basis. ";
+Plain2LR::usage = 
+"Plain2LR[expr, kList] converts the quadratic form expr in the plain Times[] form into LiteRed's sp[] form. ";
+Plain2LR[expr_, kList_List] :=
+	Enclose[Confirm@MomentumQ[expr, kList];
+		expr /. {
+			a_^2/;MomentumQ[a, kList] :> Vectors`sp[a],
+			a_ b_/;MomentumQ[a, kList]&&MomentumQ[b, kList] :> Vectors`sp[a, b]
+		}
+	, $Failed &]
 
 
-ClearAll[PD]
+SPExpand[expr_] := expr /. ex_Vectors`sp :> Distribute[ex] //. Vectors`sp[c_?NumberQ a_, b_] :> c Vectors`sp[a, b]
+
+
 PD::usage = "PD[expr, x] is a user-defined partial derivative for deriving DEs. \
 Addtional definitions for PD[Idx[__], _] should be designated in specific problems. ";
 PD[expr_Plus, x_] := PD[#, x]&/@expr
 PD[c_ a_, x_]:=PD[c, x] a + c PD[a, x]
-PD[expr_?(FreeQ[#, _Idx]&), x_^i_.] := Module[{t}, ((\!\(
-\*SubscriptBox[\(\[PartialD]\), \(t\)]\((expr /. x -> 
-\*SuperscriptBox[\(t\), \(1/i\)])\)\)) /. t->x^i)]
+PD[expr_?(FreeQ[#, _Idx]&), x_^i_.] := Cancel[1/(i x^(i-1)) \!\(
+\*SubscriptBox[\(\[PartialD]\), \(x\)]\((expr)\)\)]
+PD[idx_Idx, x_^i_] := Collect[1/(i x^(i-1)) PD[idx, x], _Idx]
+
+
+(* ::Subsection:: *)
+(*FIRE interface*)
 
 
 GenFIREFile::usage =

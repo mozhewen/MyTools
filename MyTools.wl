@@ -4,9 +4,15 @@
 (*Description:*)
 (*	Utility functions for calculating loop integrals. *)
 (**)
+(*Mathematica version: 13.0*)
+(**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2022.2.9*)
+(*TODO:*)
+(*	1. Add Kira interface. *)
+(*	2. Improve the function of ZeroSIntQ[]. *)
+(**)
+(*Last update: 2022.2.19*)
 
 
 (* ::Section:: *)
@@ -22,18 +28,17 @@ If[!ValueQ[Global`$FIREHome],
 
 BeginPackage["MyTools`", {"FeynCalc`"}];
 
+Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]];
+
 ClearAll[Coef012]
-ClearAll[Adjoint]
 ClearAll[PropExplicit]
-ClearAll[EnumSP]
 ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
 
-ClearAll[\[CapitalOmega]]
-
 ClearAll[SInt]
 ClearAll[FC2SInt]
-ClearAll[FC2FIRE]
+ClearAll[FC2Plain]
+ClearAll[Plain2FC]
 ClearAll[Idx2SInt]
 
 ClearAll[DisplaySInt]
@@ -49,7 +54,7 @@ ClearAll[GuessTrans]
 ClearAll[AP]
 
 ClearAll[CompleteBasis]
-ClearAll[Idx]
+
 ClearAll[ExpressByBasis]
 ClearAll[GenFIREFiles]
 ClearAll[GetFIRETables]
@@ -59,6 +64,10 @@ Begin["`Private`"]
 
 (* ::Section:: *)
 (*Body*)
+
+
+(* Package directory *)
+pd = DirectoryName[$InputFileName];
 
 
 (* ::Subsection:: *)
@@ -105,28 +114,17 @@ Coef012[expr_, lList_List] :=
 	]
 
 
-Adjoint::usage = "Adjoint[m] calculates the adjoint of matrix m. ";
-Adjoint[m_?MatrixQ] :=
-	Map[Reverse, Minors[Transpose[m]], {0, 1}]Table[(-1)^(i+j), {i, Length[m]}, {j, Length[m]}]
-
-
 PropExplicit::usage =
 "PropExplicit[PropagatorDenominator[p, m]] rewrites the propagator denominator in the explicit form \
 \!\(\*SuperscriptBox[\(p\), \(2\)]\)-\!\(\*SuperscriptBox[\(m\), \(2\)]\). ";
-PropExplicit[PropagatorDenominator[p_, m_]] := Pair[p, p] - m^2
-
-
-EnumSP::usage =
-"EnumSP[kList, sp] gives all scalar products of momenta in kList. The function used to represent scalar \
-products are defined by sp. ";
-EnumSP[kList_List, sp_:Times] := sp@@@DeleteDuplicates[Tuples[kList, 2], ContainsExactly]
+PropExplicit[PropagatorDenominator[p_, m_]] := Module[{ep = Expand[p]}, Pair[ep, ep] - m^2]
 
 
 LinearIndepQ::usage = 
 "LinearIndepQ[{b1, b2, ...}, {l1, l2, ...}] check if the quadratic form basis {b1, b2, ...} is linear \
 independent modulo constant terms. Momenta l1, l2, ... are used to define variable terms. \
 Note that scalar products should be represented in the FeynCalc form Pair[Momentum[l1], Momentum[l2]] \
-instead of the FIRE form l1 l2. It's a faster version of LinearReduce[] for only testing the independency \
+instead of the plain form l1 l2. It's a faster version of LinearReduce[] for only testing the independency \
 without actually computing the coefficients. (These is a faster version of LinearReduce[] for full \
 functionality by solving the lift problem. However Mathematica has not yet implement a \"lift\" function \
 as Singular. )";
@@ -146,7 +144,7 @@ LinearReduce::usage =
 "LinearReduce[expr, {b1, b2, ...}, {l1, l2, ...}] reduces the quadratic form expr into a linear combination \
 of b1, b2, ... and constant terms (returned as {{c1, c2, ...}, const}). Momenta l1, l2, ... are used to \
 define variable terms. Note that scalar products should be represented in the FeynCalc form \
-Pair[Momentum[l1], Momentum[l2]] instead of the FIRE form l1 l2. ";
+Pair[Momentum[l1], Momentum[l2]] instead of the plain form l1 l2. ";
 LinearReduce::nosln = "No solution is found. ";
 LinearReduce::msln = "Solution is not unique. A particular one is chosen. ";
 LinearReduce[expr_, basis_List, lList_List] := 
@@ -170,11 +168,6 @@ LinearReduce[expr_, basis_List, lList_List] :=
 
 (* ::Subsection:: *)
 (*Functions that are used by user*)
-
-
-\[CapitalOmega]::usage =
-"\[CapitalOmega][d] is the surface area of a d-dimensional unit sphere. ";
-\[CapitalOmega][d_] := (2 \[Pi]^(d/2))/Gamma[d/2]
 
 
 (* ::Subsubsection:: *)
@@ -204,9 +197,24 @@ FC2SInt[expr_, lList_List, OptionsPattern[]] := FeynAmpDenominatorCombine[expr] 
 		]
 
 
-FC2FIRE::usage =
-"FC2FIRE[expr] converts the quadratic form expr in FeynCalc's Pair[] form into FIRE's Times[] form. ";
-FC2FIRE[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
+FC2Plain::usage =
+"FC2Plain[expr] converts the quadratic form expr in FeynCalc's Pair[] form into the plain Times[] form. ";
+FC2Plain[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
+
+
+Plain2FC::usage = 
+"Plain2FC[expr, kList] converts the quadratic form expr in the plain Times[] form into FeynCalc's Pair[] form. ";
+Plain2FC[expr_, kList_List] :=
+	Enclose@If[Confirm@MomentumQ[expr, kList],
+		expr /. {a:(Alternatives@@kList) :> Momentum[a, D]}
+	,(*Else*)
+		expr /. {
+			a_^2/;MomentumQ[a, kList] :> 
+				Pair@@({a, a}/.{k:(Alternatives@@kList) :> Momentum[k, D]}),
+			a_ b_/;MomentumQ[a, kList]&&MomentumQ[b, kList] :> 
+				Pair@@({a, b}/.{k:(Alternatives@@kList) :> Momentum[k, D]})
+		}
+	]
 
 
 Idx2SInt::usage = 
@@ -275,7 +283,7 @@ UF[sint_SInt, lList_List] :=
 		{
 			U = Simplify@Det[A], 
 			(* NOTE: Tr[] has been redefined by FeynCalc. Use TensorContract instead. *)
-			(* F = *)Simplify[1/4 TensorContract[ExpandScalarProduct[Adjoint[A] . Outer[Pair, b, b]], {1, 2}] - c U]
+			(* F = *)Simplify[1/4 TensorContract[ExpandScalarProduct[Adjugate[A] . Outer[Pair, b, b]], {1, 2}] - c U]
 		}
 	]
 
@@ -418,7 +426,7 @@ GuessTrans[src_List, dest_List, lList_List] :=
 	Module[{n = Length[lList], c, cList, d, rule, eq, coef, sln4c, sln4d, rs},
 		cList = Flatten@Array[c, {n, n}];
 		rule = Table[lList[[i]] -> Sum[c[i, j]lList[[j]], {j, n}] + d[i], {i, n}];
-		eq = (FC2FIRE[src]/.rule) - FC2FIRE[dest];
+		eq = (FC2Plain[src]/.rule) - FC2Plain[dest];
 		coef = Normal@CoefficientArrays[eq, lList];
 		sln4c = Solve[Join[Flatten[coef[[3]]], #(#^2-1)&/@cList] == 0, cList];
 		Do[
@@ -524,9 +532,6 @@ CompleteBasis[basis_List, int_List, ext_List, OptionsPattern[]] :=
 	]
 
 
-Idx::usage = "Idx[a1, a2, ] represents the indices of propagators in a specific basis. ";
-
-
 ExpressByBasis::usage =
 "ExpressByBasis[sintList, basis, lList] tries to express the propagators of scalar integrals in sintList \
 with respect to basis in the sense of change of variables of loop momenta. The numerators (with negative \
@@ -618,7 +623,7 @@ GenFIREFiles[pn_Integer, problemName_String, basis_List, idxList_List, int_List,
 			Threads = OptionValue["Threads"],
 			Preferred = OptionValue["Preferred"],
 			OutDir = OptionValue["OutDir"],
-			basisF = FC2FIRE[basis],
+			basisF = FC2Plain[basis],
 			fileName
 		},
 
@@ -713,7 +718,7 @@ End[]
 EndPackage[]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Unused*)
 
 

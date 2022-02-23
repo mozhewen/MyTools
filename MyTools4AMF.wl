@@ -15,6 +15,8 @@
 
 BeginPackage["MyTools4AMF`"];
 
+Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]];
+
 ClearAll[LinearReduce]
 ClearAll[LinearIndepQ]
 
