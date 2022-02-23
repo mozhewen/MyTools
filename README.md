@@ -16,7 +16,7 @@ The tools for differential equations `MyTools4DEs.wl` requires FIRE and
 
 to be installed. The utilities for AMFlow `MyTools4AMF.wl` apparently depends on
 
-* AMFlow (https://gitlab.com/xiaoliu222222/amflow). 
+* AMFlow (https://gitlab.com/multiloop-pku/amflow). 
 
 Please install these dependencies before using the corresponding packages. 
 
