@@ -10,9 +10,9 @@
 (**)
 (*TODO:*)
 (*	1. Add Kira interface. *)
-(*	2. Improve the function of ZeroSIntQ[]. *)
+(*	2. Check the function of ZeroSIntQ[]. *)
 (**)
-(*Last update: 2022.2.19*)
+(*Last update: 2022.3.14*)
 
 
 (* ::Section:: *)
@@ -23,6 +23,20 @@ If[!ValueQ[Global`$FIREHome],
 	MyTools`$FIREHome = "/home/mozhewen/Documents/fire/FIRE6/",
 	MyTools`$FIREHome = Global`$FIREHome;
 	Remove[Global`$FIREHome]
+]
+
+
+If[!ValueQ[Global`$KiraExecutable],
+	MyTools`$KiraExecutable = "/usr/local/bin/kira",
+	MyTools`$KiraExecutable = Global`$KiraExecutable;
+	Remove[Global`$KiraExecutable]
+]
+
+
+If[!ValueQ[Global`$FermatExecutable],
+	MyTools`$FermatExecutable = "/home/mozhewen/Documents/ferl6/fer64",
+	MyTools`$FermatExecutable = Global`$FermatExecutable;
+	Remove[Global`$FermatExecutable]
 ]
 
 
@@ -52,12 +66,14 @@ ClearAll[GroupEquivSInt]
 ClearAll[Match2EquivSInt]
 ClearAll[GuessTrans]
 ClearAll[AP]
-
 ClearAll[CompleteBasis]
+ClearAll[ExpressByBasis, ExpressByBasisParallel]
 
-ClearAll[ExpressByBasis]
 ClearAll[GenFIREFiles]
 ClearAll[GetFIRETables]
+
+ClearAll[GenKiraFiles]
+ClearAll[GetKiraTables]
 
 Begin["`Private`"]
 
@@ -72,10 +88,6 @@ pd = DirectoryName[$InputFileName];
 
 (* ::Subsection:: *)
 (*Functions that may not be used directly by users*)
-
-
-(* Package directory *)
-pd = DirectoryName[$InputFileName];
 
 
 Coef012::usage =
@@ -274,7 +286,8 @@ DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
 
 
 UF::usage = 
-"UF[sint, lList] gives the U, F polynomials in \[Alpha]-parameterization in the form {U, F}. ";
+"UF[sint, lList] gives the U, F polynomials in \[Alpha]-parameterization in the form {U, F}. Note that \
+the powers of the denominators in sint are not checked. ";
 UF[sint_SInt, lList_List] :=
 	Module[{\[Alpha]List = Array[Subscript[\[Alpha], #]&, Length[sint]],
 			Q, c, b, A, U},
@@ -291,9 +304,12 @@ UF[sint_SInt, lList_List] :=
 ZeroSIntQ::usage = 
 "ZeroSIntQ[sint, lList] determines whether sint is a zero integral. ";
 ZeroSIntQ[sint_SInt, lList_List, op:OptionsPattern[]] :=
-	Module[{U, F},
-		{U, F} = UF[Replace[sint, {_, 0} -> Sequence], lList];
-		If[U F === 0, True, False]
+	Module[{sint2 = Replace[sint, {_, 0} -> Sequence], U, F, \[Lambda]},
+		{U, F} = UF[sint2, lList];
+		AnyTrue[
+			Subsets[Array[Subscript[\[Alpha], #]&, Length[sint2]], {1, Length[sint2]-1}], 
+			Count[Expand@CoefficientList[U F /. Thread[# -> \[Lambda] #], \[Lambda]], Except[0]] <= 1 &
+		]
 	]
 
 
@@ -445,7 +461,7 @@ GuessTrans[src_List, dest_List, lList_List] :=
 
 
 AP::usage =
-"AP[propList, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
+"AP[sint, lList, d, options...] performs d-dimensional \[Alpha]-parameterization and momentum integration. 
 \"eps\" \[Rule] None | ...
     The variable chosen as a positive infinitesimal (even if it has a explicit minus sign. \
 For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
@@ -506,10 +522,6 @@ AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 	]
 
 
-(* ::Subsubsection:: *)
-(*FIRE interface*)
-
-
 CompleteBasis::usage =
 "CompleteBasis[basis, int, ext, \"AuxiliaryBasis\" \[Rule] {aux1, aux2, ...}] completes basis with respect to \
 the specific auxiliary basis aux1, aux2, ... ";
@@ -519,7 +531,9 @@ Options[CompleteBasis] = {
 CompleteBasis[basis_List, int_List, ext_List, OptionsPattern[]] :=
 	Module[{result = basis, auxBasis},
 		auxBasis = If[OptionValue["AuxiliaryBasis"] === None, 
-			EnumSP[Join[int, ext], FCI@*SPD]//DeleteCases[#, _?(FreeQ[#, Alternatives@@int]&)]&,
+			FCI@*SPD /@ Plus@@@DeleteCases[Subsets[Join[int, ext], {1, 2}],
+				_?(FreeQ[#, Alternatives@@int]&)
+			], 
 			OptionValue["AuxiliaryBasis"]
 		];
 		Do[
@@ -548,7 +562,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 			ShowProgress = OptionValue["ShowProgress"],
 			printcell,
 			basisI = FCI[basis],
-			sint, denomPos, denom, numer, b, bList, word, lrules, 
+			denomPos, denom, numer, b, bList, word, lrules, 
 			rt, idx, rs, result},
 		bList = Array[b, Length[basisI]];
 		DynamicModule[{prog = 0},
@@ -605,7 +619,71 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 		(*Return*)result
 	]
 	
-ExpressByBasis[sint_SInt, basis_List, lList_List, op:OptionsPattern[{"ShowProgress" -> False}]] := First@ExpressByBasis[{sint}, basis, lList, op]
+ExpressByBasis[sint_SInt, basis_List, lList_List, op:OptionsPattern[{"ShowProgress" -> False}]] := 
+	First@ExpressByBasis[{sint}, basis, lList, op]
+
+
+ExpressByBasisParallel::usage =
+"ExpressByBasisParallel[sintList, basis, lList] same as ExpressByBasis[] but with parallel kernels. ";
+Options[ExpressByBasisParallel] = {
+	"AllMatches" -> False
+}
+ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
+	Module[{AllMatches = OptionValue["AllMatches"],
+			basisI = FCI[basis],
+			sint, denomPos, denom, numer, b, bList, word, lrules, 
+			rt, idx, rs, result},
+		bList = Array[b, Length[basisI]];
+		result = ParallelTable[
+			sint = sintList[[i]];
+			rs = {};
+			denomPos = Flatten@Position[sint, {_, a_/;a>0}, {1}, Heads -> False];
+			denom = sint[[denomPos]];
+			Catch@Do[
+				rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basisI[[can]])), lList, SectorOnly -> True];
+				rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];
+				Do[
+					(* Deal with the denominator *)
+					idx = Table[0, Length[basisI]];
+					idx[[can]] = List@@denom[[arrDenom, 2]];
+
+					(* Deal with the numerator *)
+					If[Count[sint, {_, a_Integer/;a<0}] > 0 (* Non-trivial numerator *), 
+						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basisI[[can]], lList];
+						If[lrules === Null,
+							Message[ExpressByBasis::guessfail, i, denomPos[[arrDenom]], can]; 
+							Continue[];
+						];
+						numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
+							(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basisI, lList]
+						)]];
+					,(*Else*) (* No numerator (numer = 1) *)
+						numer = 1;
+					];
+
+					word = Join[{Expand@Last[#1]}, First[#1]]&/@CoefficientRules[numer, bList];
+					AppendTo[rs, {
+						Sum[mono[[1]]Idx@@(idx - mono[[2;;]]), {mono, word}],
+						denomPos[[arrDenom]] -> can
+					}];
+					If[AllMatches === False, Throw[Null]];
+					,
+					{arrDenom, rt}
+				]
+				,
+				{can, Subsets[Range@Length[basisI], {Length[denom]}]}
+			]; 
+			(*Return*)If[AllMatches === True, rs, First[rs, Null]],
+			{i, Length[sintList]},
+			Method -> "FinestGrained",
+			DistributedContexts -> Automatic
+		];
+		(*Return*)result
+	]
+
+
+(* ::Subsubsection:: *)
+(*FIRE interface*)
 
 
 GenFIREFiles::usage = 
@@ -617,7 +695,6 @@ Options[GenFIREFiles] = {
 	"Preferred" -> {},
 	"OutDir" :> NotebookDirectory[]
 };
-
 GenFIREFiles[pn_Integer, problemName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
 	Module[{
 			Threads = OptionValue["Threads"],
@@ -658,7 +735,7 @@ GenFIREFiles[pn_Integer, problemName_String, basis_List, idxList_List, int_List,
 #output `na`.tables
 "][<|
 	"th" -> Threads, 
-	"varList" -> StringRiffle[Complement[Variables@{EnumSP[ext, FCI@SPD], basisF}, int, ext](*NOTE: To be tested here*), ", "], 
+	"varList" -> StringRiffle[Complement[Variables@{EnumSP[ext, FCI@*SPD], basisF}, int, ext](*NOTE: To be tested here*), ", "], 
 	"no" -> pn,
 	"na" -> problemName,
 	"pf" -> If[Preferred=!={}, StringTemplate["#preferred ``.preferred"][problemName], ""]
@@ -680,7 +757,6 @@ ClearAll[subker]
 Options[GetFIRETables] = {
 	"OutDir" :> NotebookDirectory[]
 };
-
 GetFIRETables[problemName_String, OptionsPattern[]] := 
 	Module[{
 			OutDir = OptionValue["OutDir"],
@@ -710,6 +786,158 @@ GetFIRETables[problemName_String, OptionsPattern[]] :=
 	]	
 
 
+(* ::Subsubsection:: *)
+(*Kira interface*)
+
+
+familyTemp = StringTemplate[
+"integralfamilies: 
+  - name: \"`name`\"
+    loop_momenta: `lList`
+    top_level_sectors: [`top`]
+    propagators: 
+      `props`
+"];
+
+kinematicsTemp = StringTemplate[
+"kinematics: 
+  incoming_momenta: `kList`
+  kinematic_invariants: 
+    `inv`
+  scalarproduct_rules: 
+    `rep`
+  `strbo`
+"];
+
+jobsTemp = StringTemplate[
+"jobs: 
+  - reduce_sectors: 
+      reduce: 
+        - {topologies: [`name`], sectors: [`top`], r: `r`, s: `s`}
+      select_integrals: 
+        select_mandatory_list: 
+          - [`name`, target]
+      `pf`
+      run_initiate: true
+      run_triangular: true
+      run_back_substitution: true
+      integral_ordering: `io`
+
+  - kira2math: 
+      target: 
+        - [`name`, target]
+      reconstruct_mass: true
+"];
+
+
+GenKiraFiles::usage =
+"GenKiraFiles[topoName, basis, idxList, int, ext] generates Kira configuration & job files for the IBP reduction. \
+Due to the feature of Kira, it's better to check that no scaleless integral appears in the input. ";
+Options[GenKiraFiles] = {
+	"Top" -> Automatic,
+	"VarDims" -> {_ -> 1},
+	"Unit" -> None, 
+	"rs" -> {Automatic, Automatic},
+	"Preferred" -> {},
+	"IntegralOrdering" -> 1,
+	"OutDir" :> NotebookDirectory[]
+};
+GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
+	Module[{
+			Top = OptionValue["Top"],
+			VarDims = OptionValue["VarDims"],
+			Unit = OptionValue["Unit"],
+			rs = OptionValue["rs"],
+			Preferred = OptionValue["Preferred"],
+			IntegralOrdering = OptionValue["IntegralOrdering"],
+			OutDir = OptionValue["OutDir"],
+			props = FC2Plain[basis], rep, inv,
+			top, rank, denom
+		},
+		(* 1. Delete old files *)
+		DeletePath[FileNameJoin[{OutDir, topoName, "results"}]];
+		DeletePath[FileNameJoin[{OutDir, topoName, "sectormappings"}]];
+		DeletePath[FileNameJoin[{OutDir, topoName, "tmp"}]];
+		DeletePath[FileNameJoin[{OutDir, topoName, "kira.log"}]];
+		DeletePath[FileNameJoin[{OutDir, topoName, "preferred"}]];
+
+		(* 2. Export configuration information *)
+		FileTemplateApply[familyTemp, 
+			<|
+				"name" -> topoName,
+				"lList" -> EncodeIntoYAML[int, "Type" -> "Inline"],
+				"top" -> Switch[Top, Automatic, 2^Length[props]-1, _, Top],
+				"props" -> EncodeIntoYAML[{#, 0}& /@ props, 6, "Type" -> "Block"]
+			|>,
+			FileNameJoin[{OutDir, topoName, "config", "integralfamilies.yaml"}]
+		];
+
+		rep = EnumSP[ext, FCI@*SPD];
+		inv = Complement[Variables[{props, rep}], int, ext];
+		FileTemplateApply[kinematicsTemp, 
+			<|
+				"kList" -> EncodeIntoYAML[ext, "Type" -> "Inline"],
+				"inv" -> EncodeIntoYAML[{inv, Replace[VarDims]/@inv}\[Transpose], 4, "Type" -> "Block"],
+				"rep" -> EncodeIntoYAML[{EnumSP[ext, List], rep}\[Transpose], 4, "Type" -> "Block"],
+				"strbo" -> Switch[Unit, None, "", _, StringTemplate["symbol_to_replace_by_one: `unit`"][Unit]]
+			|>,
+			FileNameJoin[{OutDir, topoName, "config", "kinematics.yaml"}]
+		];
+
+		(* 3. Export target & preferred files *)
+		Export[FileNameJoin[{OutDir, topoName, "target"}], idxList/.Idx->Symbol[topoName], "Text"];
+		If[MatchQ[Preferred, {__}],
+			Export[FileNameJoin[{OutDir, topoName, "preferred"}], Preferred/.Idx->Symbol[topoName], "Text"];
+		];
+
+		(* 4. Export job file *)
+		top = AnyTrue[#, #>0&]& /@ Transpose[Union[idxList, Preferred]/.Idx->List];
+		top = Sum[If[top[[i]], 2^(i-1), 0, 0], {i, Length[top]}];
+		denom = Switch[rs[[1]],
+			Automatic, Max[Total@Select[#, #>0&]& /@ Union[idxList, Preferred]/.Idx->List],
+			_, rs[[1]]
+		];
+		rank = Switch[rs[[2]],
+			Automatic, Max[-Total@Select[#, #<0&]& /@ Union[idxList, Preferred]/.Idx->List],
+			_, rs[[2]]
+		];
+		FileTemplateApply[jobsTemp,
+			<|
+				"name" -> topoName,
+				"top" -> top,
+				"r" -> denom,
+				"s" -> rank,
+				"pf" -> If[MatchQ[Preferred, {__}], "preferred_masters: preferred", ""],
+				"io" -> IntegralOrdering
+			|>,
+			FileNameJoin[{OutDir, topoName, "jobs.yaml"}]
+		];
+	]
+
+
+GetKiraTables::usage = 
+"GetKiraTables[topoName] gets the results of Kira corresponding to topoName. Note that zero integrals and \
+trivial reductions a \[Rule] a may not appear in the result table. ";
+Options[GetKiraTables] = {
+	"Threads" -> 8,
+	"OutDir" :> NotebookDirectory[]
+};
+GetKiraTables[topoName_String, OptionsPattern[]] := 
+	Module[{
+			Threads = OptionValue["Threads"],
+			OutDir = OptionValue["OutDir"]
+		},
+		(* 1. Run Kira *)
+		RunProcess[{$KiraExecutable, StringTemplate["--parallel=``"][Threads], "jobs.yaml"},
+			ProcessDirectory -> FileNameJoin[{OutDir, topoName}],
+			ProcessEnvironment -> <|"FERMATPATH" -> $FermatExecutable|>
+		];
+
+		(* 5. Get results *)
+		Get[FileNameJoin[{OutDir, topoName, "results", topoName, "kira_target.m"}]]/.Symbol[topoName]->Idx
+	]
+
+
 (* ::Section:: *)
 (*End*)
 
@@ -718,7 +946,7 @@ End[]
 EndPackage[]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Unused*)
 
 

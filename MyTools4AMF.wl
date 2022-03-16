@@ -6,7 +6,7 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2022.2.1*)
+(*Last update: 2022.3.6*)
 
 
 (* ::Section:: *)
@@ -21,7 +21,6 @@ ClearAll[LinearReduce]
 ClearAll[LinearIndepQ]
 
 ClearAll[CompleteBasis]
-ClearAll[ToSqForm]
 
 Begin["`Private`"]
 
@@ -102,18 +101,6 @@ CompleteBasis[basis_List, int_List, ext_List] :=
 		];
 		result
 	]
-
-
-ToSqForm::usage = 
-"ToSqForm[quad, l, SPrules:{}] constructs the standard form of quadratic form quad with respect to variable l. \
-SPrules is used to simplify scalar products of the constant term. 
-ToSqForm[quad, {\!\(\*SubscriptBox[\(l\), \(1\)]\), \!\(\*SubscriptBox[\(l\), \(2\)]\), ...}, SPrules:{}] uses \
-the first \!\(\*SubscriptBox[\(l\), \(i\)]\) that appears in quad as the variable. ";
-ToSqForm[quad_, l:Except[_List], SPrules_:{}] := 
-	Module[{a = Coefficient[quad, l, 2], b = Coefficient[quad, l, 1], c = Coefficient[quad, l, 0]},
-		a (Expand[l + b/(2a)])^2- Together[Expand[(b^2 - 4 a c)/(4a)]/.SPrules]
-	]
-ToSqForm[quad_, lList_List, SPrules_:{}] := ToSqForm[quad, FirstCase[lList, _?(MemberQ[Variables[quad],#]&)], SPrules]
 
 
 (* ::Section:: *)
