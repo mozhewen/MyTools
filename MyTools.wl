@@ -4,15 +4,14 @@
 (*Description:*)
 (*	Utility functions for calculating loop integrals. *)
 (**)
-(*Mathematica version: 13.0*)
-(**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*TODO:*)
-(*	1. Add Kira interface. *)
-(*	2. Check the function of ZeroSIntQ[]. *)
+(*Mathematica version: 13.0*)
 (**)
-(*Last update: 2022.3.14*)
+(*Last update: 2022.3.25*)
+(**)
+(*TODO:*)
+(*	1. Check the function of ZeroSIntQ[]. *)
 
 
 (* ::Section:: *)
@@ -256,11 +255,11 @@ SinglePropBox[prop_, a_] :=
 	]
 
 
+DisplaySInt::usage =
+"DisplaySInt[expr, lList] displays SInt[...] in expr with loop momenta in lList in a 2D math form. "
 Options[DisplaySInt] = {
 	"d" -> "d"
 };
-DisplaySInt::usage =
-"DisplaySInt[expr, lList] displays SInt[...] in expr with loop momenta in lList in a 2D math form. "
 DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
 	expr/.sint_SInt :> Module[{
 			numer = Cases[sint, {prop_, a_/;a<0} :> {prop, -a}],
@@ -852,7 +851,7 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 			IntegralOrdering = OptionValue["IntegralOrdering"],
 			OutDir = OptionValue["OutDir"],
 			props = FC2Plain[basis], rep, inv,
-			top, rank, denom
+			topLoc, top, dot, rank, denom
 		},
 		(* 1. Delete old files *)
 		DeletePath[FileNameJoin[{OutDir, topoName, "results"}]];
@@ -891,14 +890,15 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 		];
 
 		(* 4. Export job file *)
-		top = AnyTrue[#, #>0&]& /@ Transpose[Union[idxList, Preferred]/.Idx->List];
-		top = Sum[If[top[[i]], 2^(i-1), 0, 0], {i, Length[top]}];
+		topLoc = AnyTrue[#, #>0&]& /@ Transpose[Union[idxList, Preferred]/.Idx->List];
+		top = Sum[If[topLoc[[i]], 2^(i-1), 0, 0], {i, Length[topLoc]}];
+		dot = Max[Total@Select[#-1, #>0&]& /@ (Union[idxList, Preferred]/.Idx->List)];
 		denom = Switch[rs[[1]],
-			Automatic, Max[Total@Select[#, #>0&]& /@ Union[idxList, Preferred]/.Idx->List],
+			Automatic, Count[topLoc, True] + dot,
 			_, rs[[1]]
 		];
 		rank = Switch[rs[[2]],
-			Automatic, Max[-Total@Select[#, #<0&]& /@ Union[idxList, Preferred]/.Idx->List],
+			Automatic, Max[-Total@Select[#, #<0&]& /@ (Union[idxList, Preferred]/.Idx->List)],
 			_, rs[[2]]
 		];
 		FileTemplateApply[jobsTemp,
@@ -946,7 +946,7 @@ End[]
 EndPackage[]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*Unused*)
 
 

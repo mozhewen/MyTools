@@ -6,7 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Last update: 2022.3.6*)
+(*Mathematica version: 13.0*)
+(**)
+(*Last update: 2022.3.25*)
 
 
 (* ::Section:: *)
@@ -87,12 +89,18 @@ LinearIndepQ[basis_List, int_List, ext_List] :=
 
 CompleteBasis::usage =
 "CompleteBasis[basis, int, ext] completes basis with respect to the specific auxiliary basis aux1, aux2, ... ";
-CompleteBasis[basis_List, int_List, ext_List] :=
+Options[CompleteBasis] = {
+	"AuxiliaryBasis" -> None
+}
+CompleteBasis[basis_List, int_List, ext_List, OptionsPattern[]] :=
 	Module[{result = basis, auxBasis},
-		auxBasis = (Plus@@@DeleteCases[
-			Subsets[Join[int, ext], {1, 2}],
-			_?(FreeQ[#, Alternatives@@int]&)
-		])^2;
+		auxBasis = If[OptionValue["AuxiliaryBasis"] === None, 
+			(Plus@@@DeleteCases[
+				Subsets[Join[int, ext], {1, 2}],
+				_?(FreeQ[#, Alternatives@@int]&)
+			])^2,
+			OptionValue["AuxiliaryBasis"]
+		];
 		Do[
 			If[LinearIndepQ[Append[result, aux], int, ext],
 				AppendTo[result, aux];

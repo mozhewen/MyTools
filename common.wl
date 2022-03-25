@@ -1,5 +1,17 @@
 (* ::Package:: *)
 
+(* ::Text:: *)
+(*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
+(**)
+(*Mathematica version: 13.0*)
+(**)
+(*Last update: 2022.3.23*)
+(**)
+(*TODO:*)
+(*	1. Kira interface: Optimize the choice of r, s. *)
+(*	2. Check the function of ZeroSIntQ[]. *)
+
+
 ClearAll[EnumSP]
 ClearAll[MomentumQ]
 ClearAll[ToSqForm]
@@ -18,6 +30,7 @@ ClearAll[DepthStruct]
 ClearAll[ScalarCount]
 
 ClearAll[EncodeIntoYAML]
+ClearAll[ToStr]
 ClearAll[DeletePath]
 
 
@@ -127,7 +140,7 @@ DDCasesAll[expr_, pattern_] := DeleteDuplicates@Cases[expr, pattern, {0, \[Infin
 
 
 (* ::Section:: *)
-(*Interface*)
+(*For I/O*)
 
 
 MapAllStruct[f_, list_List] := f[MapAllStruct[f, #]& /@ list]
@@ -213,6 +226,13 @@ EncodeIntoYAMLInternal[ass_Association, indent_:0, type_] :=
 EncodeIntoYAMLInternal[str_String, indent_:0, type_] := {str, "Inline"}
 
 EncodeIntoYAMLInternal[expr_, indent_:0, type_] := {ToString[expr, InputForm], "Inline"}
+
+
+ToStr::usage = 
+"ToStr[data] is used for encoding data into a file name. ";
+ToStr[s_String] := s
+ToStr[i_Integer] := TextString[i]
+ToStr[r_Rational] := ToStr[Numerator[r]] <> "db" <> ToStr[Denominator[r]]
 
 
 DeletePath[path_String] := 

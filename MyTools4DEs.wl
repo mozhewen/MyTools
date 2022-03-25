@@ -6,10 +6,12 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*TODO: *)
-(*	(Null)*)
+(*Mathematica version: 13.0*)
 (**)
-(*Last update: 2022.3.10*)
+(*Last update: 2022.3.25*)
+(**)
+(*TODO: *)
+(*	(None)*)
 
 
 (* ::Section:: *)
@@ -268,18 +270,20 @@ the IBP reduction for idxList. Due to the feature of Kira, it's better to check 
 integral appears in the input. ";
 Options[RunKira] = {
 	"Threads" -> 8,
-	"IntegralOrdering" -> 1,
+	"rs" -> {Automatic, Automatic},
 	"Preferred" -> {},
+	"IntegralOrdering" -> 1,
 	"OutDir" :> NotebookDirectory[]
 };
 
 RunKira[topoName_String, idxList_List, OptionsPattern[]] := 
 	Module[{
 			Threads = OptionValue["Threads"],
-			IntegralOrdering = OptionValue["IntegralOrdering"],
+			rs = OptionValue["rs"],
 			Preferred = OptionValue["Preferred"],
+			IntegralOrdering = OptionValue["IntegralOrdering"],
 			OutDir = OptionValue["OutDir"],
-			top, rank, denom
+			topLoc, top, dot, rank, denom
 		},
 		(* 1. Delete old files *)
 		DeletePath[FileNameJoin[{OutDir, topoName, "results"}]];
@@ -295,10 +299,17 @@ RunKira[topoName_String, idxList_List, OptionsPattern[]] :=
 		];
 
 		(* 3. Export job file *)
-		top = AnyTrue[#, #>0&]& /@ Transpose[Union[idxList, Preferred]/.Idx->List];
-		top = Sum[If[top[[i]], 2^(i-1), 0, 0], {i, Length[top]}];
-		rank = Max[-Total@Select[#, #<0&]& /@ Union[idxList, Preferred]/.Idx->List];
-		denom = Max[Total@Select[#, #>0&]& /@ Union[idxList, Preferred]/.Idx->List];
+		topLoc = AnyTrue[#, #>0&]& /@ Transpose[Union[idxList, Preferred]/.Idx->List];
+		top = Sum[If[topLoc[[i]], 2^(i-1), 0, 0], {i, Length[topLoc]}];
+		dot = Max[Total@Select[#-1, #>0&]& /@ (Union[idxList, Preferred]/.Idx->List)];
+		denom = Switch[rs[[1]],
+			Automatic, Count[topLoc, True] + dot,
+			_, rs[[1]]
+		];
+		rank = Switch[rs[[2]],
+			Automatic, Max[-Total@Select[#, #<0&]& /@ (Union[idxList, Preferred]/.Idx->List)],
+			_, rs[[2]]
+		];
 		FileTemplateApply[jobsTemp,
 			<|
 				"name" -> topoName,
