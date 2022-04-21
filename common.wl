@@ -89,7 +89,7 @@ ToSqForm[quad_, lList_List, SPrules_:{}] := ToSqForm[quad, FirstCase[lList, _?(M
 ToSqForm[quad_, l_, SPrules_:{}] := 
 	Module[{a = Coefficient[quad, l, 2], b = Coefficient[quad, l, 1], c = Coefficient[quad, l, 0]},
 		If[a =!= 0,
-			a (Expand[l + b/(2a)])^2- Together[Expand[(b^2 - 4 a c)/(4a)]/.SPrules]
+			a (Expand[l + b/(2a)])^2- Together[Expand[(b^2 - 4 a c)/(4a)]//.SPrules]
 		,(*Else*)
 			quad
 		]

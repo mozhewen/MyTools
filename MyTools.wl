@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.0*)
 (**)
-(*Last update: 2022.3.25*)
+(*Last update: 2022.4.1*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -353,7 +353,7 @@ AlphaStructure[sint_SInt, lList_List, OptionsPattern[]] :=
 		a = List@@sint[[;;, 2]];
 		co = COrdering[{
 				U, F, 
-				If[SectorOnly,
+				If[SectorOnly === True,
 					Nothing,
 					(* NOTE: Shift powers because CoefficientRules[] only deals with polynomials. *)
 					Product[Subscript[\[Alpha], i]^(a[[i]]-Min[a]), {i, Length[a]}]
@@ -565,7 +565,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 			rt, idx, rs, result},
 		bList = Array[b, Length[basisI]];
 		DynamicModule[{prog = 0},
-			If[ShowProgress === True,
+			If[ShowProgress =!= False,
 				printcell = PrintTemporary@Row[{
 					ProgressIndicator[Dynamic[prog], {0, Length[sintList]}],
 					Dynamic[prog], "/", Length[sintList]
@@ -818,8 +818,7 @@ jobsTemp = StringTemplate[
           - [`name`, target]
       `pf`
       run_initiate: true
-      run_triangular: true
-      run_back_substitution: true
+      `sol`
       integral_ordering: `io`
 
   - kira2math: 
@@ -838,6 +837,7 @@ Options[GenKiraFiles] = {
 	"Unit" -> None, 
 	"rs" -> {Automatic, Automatic},
 	"Preferred" -> {},
+	"RunFirefly" -> False,
 	"IntegralOrdering" -> 1,
 	"OutDir" :> NotebookDirectory[]
 };
@@ -848,6 +848,7 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 			Unit = OptionValue["Unit"],
 			rs = OptionValue["rs"],
 			Preferred = OptionValue["Preferred"],
+			RunFirefly = OptionValue["RunFirefly"],
 			IntegralOrdering = OptionValue["IntegralOrdering"],
 			OutDir = OptionValue["OutDir"],
 			props = FC2Plain[basis], rep, inv,
@@ -908,6 +909,11 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 				"r" -> denom,
 				"s" -> rank,
 				"pf" -> If[MatchQ[Preferred, {__}], "preferred_masters: preferred", ""],
+				"sol" -> Switch[RunFirefly,
+					True, "run_firefly: true",
+					Back, "run_triangular: true\n      run_firefly: back",
+					_, "run_triangular: true\n      run_back_substitution: true"
+				],
 				"io" -> IntegralOrdering
 			|>,
 			FileNameJoin[{OutDir, topoName, "jobs.yaml"}]
