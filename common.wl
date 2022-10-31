@@ -3,13 +3,9 @@
 (* ::Text:: *)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.0*)
+(*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.3.23*)
-(**)
-(*TODO:*)
-(*	1. Kira interface: Optimize the choice of r, s. *)
-(*	2. Check the function of ZeroSIntQ[]. *)
+(*Last update: 2022.10.28*)
 
 
 ClearAll[EnumSP]
@@ -17,12 +13,13 @@ ClearAll[MomentumQ]
 ClearAll[ToSqForm]
 ClearAll[\[CapitalOmega]]
 
+j;
 ClearAll[Idx]
-j;(* Register j to the context *)
 ClearAll[Idx2j, j2Idx]
 
 ClearAll[NSeries0]
 ClearAll[DDCasesAll]
+ClearAll[AddToAssoc, RemoveFromAssoc]
 
 ClearAll[MapAllStruct]
 ClearAll[MapAtValues]
@@ -137,6 +134,20 @@ NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, As
 DDCasesAll::usage =
 "DDCasesAll[expr, pattern] is a wrapper for DeleteDuplicates@Cases[expr, pattern, {0, \[Infinity]}]"
 DDCasesAll[expr_, pattern_] := DeleteDuplicates@Cases[expr, pattern, {0, \[Infinity]}]
+
+
+SetAttributes[AddToAssoc, HoldFirst]
+AddToAssoc::usage = 
+"AddToAssoc[assoc, key -> value] adds a key-value pair to assoc. 
+AddToAssoc[assoc, list] adds a list of key-value pairs. ";
+AddToAssoc[assoc_, r_Rule] := AppendTo[assoc, r]
+AddToAssoc[assoc_, rules_List] := (assoc = Join[assoc, Association[rules]])
+
+SetAttributes[RemoveFromAssoc, HoldFirst]
+RemoveFromAssoc::usage =
+"RemoveFromAssoc[assoc, key] removes key from assoc. 
+RemoveFromAssoc[assoc, key1, key2, ...] removes a sequence of keys from assoc. ";
+RemoveFromAssoc[assoc_, keys__] := (assoc = Delete[assoc, {Key[#]}&/@{keys}])
 
 
 (* ::Section:: *)

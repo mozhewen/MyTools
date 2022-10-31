@@ -6,12 +6,13 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.0*)
+(*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.4.1*)
+(*Last update: 2022.10.27*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
+(*	2. Check FP[]. *)
 
 
 (* ::Section:: *)
@@ -47,6 +48,7 @@ ClearAll[Coef012]
 ClearAll[PropExplicit]
 ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
+ClearAll[MakeSymPair]
 
 ClearAll[SInt]
 ClearAll[FC2SInt]
@@ -54,9 +56,12 @@ ClearAll[FC2Plain]
 ClearAll[Plain2FC]
 ClearAll[Idx2SInt]
 
+ClearAll[RS]
+
 ClearAll[DisplaySInt]
 
 ClearAll[\[Alpha]]
+ClearAll[\[CapitalDelta]0, FP]
 ClearAll[UF]
 ClearAll[ZeroSIntQ]
 ClearAll[COrdering]
@@ -177,6 +182,15 @@ LinearReduce[expr_, basis_List, lList_List] :=
 	]
 
 
+MakeSymPair::usage = 
+"MakeSymPair[lorentzIndexList] only uses the metric tensor to form a totally symmetric tensor for \
+indices from lorentzIndexList. ";
+MakeSymPair[{}] := 1
+MakeSymPair[lis_List] := With[{f = First[lis], r = Rest[lis]},
+	Sum[Pair[f, r[[i]]]MakeSymPair[Delete[r, i]], {i, Length[r]}]
+]
+
+
 (* ::Subsection:: *)
 (*Functions that are used by user*)
 
@@ -240,13 +254,26 @@ Idx2SInt[expr_, basis_List, OptionsPattern[]] := expr /. Idx[idx__] :>
 
 
 (* ::Subsubsection:: *)
+(*Statistics*)
+
+
+RS::usage = 
+"RS[sint] returns {r, s} where r(s) is the sum of all indices of the denominator(numerator). 
+RS[sint, assum] uses assumptions in assum to determine the positivity. ";
+RS[sint_SInt, assum_:{}] := {
+	Total@Cases[sint, {_, a_/;Simplify[a > 0, assum]} :> a],
+	Total@Cases[sint, {_, a_/;Simplify[a < 0, assum]} :> -a]
+}
+
+
+(* ::Subsubsection:: *)
 (*Typesetting*)
 
 
 ClearAll[SinglePropBox]
 SinglePropBox[prop_, a_] :=
-	If[a===1,
-		If[Head[prop]=!=Plus && Head[prop]=!=Times,
+	If[a === 1,
+		If[Head[prop] =!= Plus && Head[prop] =!= Times,
 			prop,
 			RowBox[{"(", prop, ")"}]
 		]
@@ -256,7 +283,7 @@ SinglePropBox[prop_, a_] :=
 
 
 DisplaySInt::usage =
-"DisplaySInt[expr, lList] displays SInt[...] in expr with loop momenta in lList in a 2D math form. "
+"DisplaySInt[expr, lList] displays SInt[...] in expr with loop momenta in lList in a 2D math form. ";
 Options[DisplaySInt] = {
 	"d" -> "d"
 };
@@ -282,6 +309,54 @@ DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
 
 
 \[Alpha]::usage = "\[Alpha] parameter returned by UF[] and AP[]. ";
+
+
+\[CapitalDelta]0::usage = "\[CapitalDelta]0 appears in the result of FP[] to indicate the scaleless integral (\[CapitalDelta]0 \[Rule]0). \
+\!\(\*SuperscriptBox[\(\[CapitalDelta]0\), \(a\)]\) can be translated into \!\(\*SubscriptBox[\(\[Delta]\), \(a, 0\)]\) for the UV divergence (\[Epsilon] in a is neglected). ";
+
+
+FP::usage = 
+"FP[sint, l, d] performs Feynman parameterization for loop momentum l in d dimensions. \
+It's assumed that the denominator have a '+\[ImaginaryI]0' imaginary part and the coefficient of \!\(\*SuperscriptBox[\(l\), \(2\)]\) is positive. 
+FP[sint, l, d, assum] performs Feynman parameterization on the assumptions assum of the variables in \
+the powers. ";
+FP[sint_SInt, l_, d_, assum_:{}] := 
+	Module[{
+			denu = Echo@GroupBy[List@@sint, Which[
+					Simplify[Last[#] > 0, assum], 1,
+					Simplify[Last[#] < 0, assum], -1,
+					True, 0
+				]&
+			], denom, numer, prefac,
+			a, n, A, b, c, \[CapitalDelta]
+		},
+		denom = FCI[Lookup[denu, 1, {}]]; numer = EchoLabel["numer before"]@FCI[Times@@((#1^-#2)&@@@Lookup[denu, -1, {}])];
+		a = Total[denom[[;;, 2]]]; n = Length[denom];
+		prefac = Product[Subscript[\[Alpha], i]^(denom[[i, 2]] - 1)/Gamma[denom[[i, 2]]], {i, n}];
+		{c, b, A} = EchoLabel["cbA"]@Coef012[Sum[Subscript[\[Alpha], i] denom[[i, 1]], {i, n}], {l}];
+		A = A[[1, 1]] /. Sum[Subscript[\[Alpha], i], {i, n}] -> 1;
+		b = b[[1]];
+		\[CapitalDelta] = -(c/A) + Pair[b, b]/(4 A^2) //ExpandScalarProduct;
+		If[\[CapitalDelta] === 0, \[CapitalDelta] = \[CapitalDelta]0]; (* Scaleless integral *)
+		numer = Uncontract[Expand@ExpandScalarProduct[numer /. Momentum[l, D___] :> Momentum[l, D] - b/(2 A)], l, Pair -> All];
+		numer = If[Head[numer] === Plus, List@@numer, {numer}];
+		numer = EchoLabel["numer after"]@GatherBy[numer, Count[#, Momentum[l, ___], {0, \[Infinity]}]&];
+		Map[
+			Replace[#, {
+				(cc_. (ls:(Pair[LorentzIndex[_, D___], Momentum[l, D___]]..):Nothing)/;FreeQ[cc, l]) \
+				| HoldPattern@Times[ls:(Pair[LorentzIndex[_, D___], Momentum[l, D___]]..)] :> With[{
+						m = Length[EchoLabel["ls"]@{ls}]/2,
+						lis = {ls} /. Pair[\[Mu]:LorentzIndex[__], Momentum[l, ___]] :> \[Mu]
+					},
+					If[Not@IntegerQ[m],
+						(* 0 *)Nothing,
+						(2\[Pi])^d (((-1)^(m-a) I)/(4\[Pi])^(d/2) Gamma[a-m-d/2](1/\[CapitalDelta])^(a-m-d/2)) 1/2^m MakeSymPair[lis] EchoLabel["cc"]@Times[cc] A^-a //Contract
+					]
+				]
+			}]&,
+			numer, {2}
+		] //Map[Replace[0 -> Nothing]@*Simplify@*Total, #]&
+	]
 
 
 UF::usage = 
@@ -681,7 +756,7 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 	]
 
 
-(* ::Subsubsection:: *)
+(* ::Subsubsection::Closed:: *)
 (*FIRE interface*)
 
 
@@ -785,7 +860,7 @@ GetFIRETables[problemName_String, OptionsPattern[]] :=
 	]	
 
 
-(* ::Subsubsection:: *)
+(* ::Subsubsection::Closed:: *)
 (*Kira interface*)
 
 
@@ -796,6 +871,8 @@ familyTemp = StringTemplate[
     top_level_sectors: [`top`]
     propagators: 
       `props`
+    `symIBP`
+    `cut`
 "];
 
 kinematicsTemp = StringTemplate[
@@ -833,6 +910,8 @@ GenKiraFiles::usage =
 Due to the feature of Kira, it's better to check that no scaleless integral appears in the input. ";
 Options[GenKiraFiles] = {
 	"Top" -> Automatic,
+	"SymbolicIBP" -> {},
+	"CutPropagators" -> {},
 	"VarDims" -> {_ -> 1},
 	"Unit" -> None, 
 	"rs" -> {Automatic, Automatic},
@@ -844,6 +923,8 @@ Options[GenKiraFiles] = {
 GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, OptionsPattern[]] := 
 	Module[{
 			Top = OptionValue["Top"],
+			SymbolicIBP = OptionValue["SymbolicIBP"],
+			CutPropagators = OptionValue["CutPropagators"],
 			VarDims = OptionValue["VarDims"],
 			Unit = OptionValue["Unit"],
 			rs = OptionValue["rs"],
@@ -867,7 +948,9 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 				"name" -> topoName,
 				"lList" -> EncodeIntoYAML[int, "Type" -> "Inline"],
 				"top" -> Switch[Top, Automatic, 2^Length[props]-1, _, Top],
-				"props" -> EncodeIntoYAML[{#, 0}& /@ props, 6, "Type" -> "Block"]
+				"props" -> EncodeIntoYAML[{#, 0}& /@ props, 6, "Type" -> "Block"],
+				"symIBP" -> Switch[SymbolicIBP, {}, "", _, "symbolic_ibp: " <> EncodeIntoYAML[SymbolicIBP, "Type" -> "Inline"]],
+				"cut" -> Switch[CutPropagators, {}, "", _, "cut_propagators: " <> EncodeIntoYAML[CutPropagators, "Type" -> "Inline"]]
 			|>,
 			FileNameJoin[{OutDir, topoName, "config", "integralfamilies.yaml"}]
 		];
@@ -877,7 +960,12 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 		FileTemplateApply[kinematicsTemp, 
 			<|
 				"kList" -> EncodeIntoYAML[ext, "Type" -> "Inline"],
-				"inv" -> EncodeIntoYAML[{inv, Replace[VarDims]/@inv}\[Transpose], 4, "Type" -> "Block"],
+				"inv" -> EncodeIntoYAML[Join[
+						{inv, Replace[VarDims]/@inv}\[Transpose],
+						{StringTemplate["b``"][#-1], 0}& /@ SymbolicIBP
+					],
+					 4, "Type" -> "Block"
+				],
 				"rep" -> EncodeIntoYAML[{EnumSP[ext, List], rep}\[Transpose], 4, "Type" -> "Block"],
 				"strbo" -> Switch[Unit, None, "", _, StringTemplate["symbol_to_replace_by_one: `unit`"][Unit]]
 			|>,
