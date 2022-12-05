@@ -6,9 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.0*)
+(*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.3.25*)
+(*Last update: 2022.12.5*)
 (**)
 (*TODO: *)
 (*	(None)*)
@@ -39,6 +39,13 @@ If[!ValueQ[Global`$FermatExecutable],
 ]
 
 
+If[!ValueQ[Global`$PLTHome],
+	MyTools4DEs`$PLTHome = "E:\\Loops\\Packages\\plt",
+	MyTools4DEs`$PLTHome = Global`$PLTHome;
+	Remove[Global`$PLTHome]
+]
+
+
 BeginPackage["MyTools4DEs`", {"LiteRed`", "Libra`"}];
 
 Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]];
@@ -47,11 +54,14 @@ ClearAll[Plain2LR]
 ClearAll[SPExpand]
 ClearAll[PD]
 
-ClearAll[GenFIREFiles]
-ClearAll[RunFIRE]
+ClearAll[GenFIREFiles, RunFIRE]
 
-ClearAll[GenKiraFiles]
-ClearAll[RunKira]
+ClearAll[GenKiraFiles, RunKira]
+
+ClearAll[GPL2HPL, StartPLT, CallPLT, KillPLT]
+
+ClearAll[Wrap, WrapLinearFraction]
+ClearAll[GPL, IntGPL, DysonGPL, DysonGPLWithAsy]
 
 Begin["`Private`"]
 
@@ -334,6 +344,129 @@ RunKira[topoName_String, idxList_List, OptionsPattern[]] :=
 		(* 5. Get results *)
 		Get[FileNameJoin[{OutDir, topoName, "results", topoName, "kira_target.m"}]]/.Symbol[topoName]->Idx
 	]
+
+
+(* ::Subsection:: *)
+(*Polylogarithms*)
+
+
+GPL2HPL::usage = "G2HPL[expr] converts GPL[] in expr into HPL[] by the convention of HPL.m (a-notation). "
+GPL2HPL[expr_] := expr /. {GPL[r:((0|1|-1)..), x_] :> (-1)^Count[{r}, 1] HPL`HPL[{r}, x]}
+
+
+StartPLT::usage = "StartPLT[linkName] starts a new process running PolyLogTools and returns the process \
+information. ";
+StartPLT[linkName_String:"plt1"] := Enclose[<|
+	"Link" -> ConfirmQuiet@LinkCreate[linkName],
+	"Process" -> ConfirmQuiet@StartProcess[
+		{"wolframscript", "-file", FileNameJoin[{pd, "callPLT.wls"}], linkName},
+		ProcessDirectory -> $PLTHome
+	]
+|>, $Failed&]
+
+
+CallPLT::usage = "CallPLT[expr, pltObj] evaluates expr by PolyLogTools. ";
+CallPLT[expr_, pltObj_Association] := With[{
+		link = pltObj["Link"],
+		proc = pltObj["Process"]
+	},
+	If[ProcessStatus[proc] == "Running",
+		LinkWrite[link, Hold[expr] /. GPL -> Global`G];
+		Return@ReleaseHold[LinkRead[link, Hold] /. Global`G -> GPL];
+	,(*Else*)
+		Return[$Failed]
+	]
+]
+
+
+KillPLT::usage = "KillPLT[pltObj] kills the PolyLogTools process designated by pltObj. ";
+KillPLT[pltObj_Association] := With[{
+		link = pltObj["Link"],
+		proc = pltObj["Process"]
+	},
+	LinkWrite[link, Hold[Quit[0]]];
+	Echo@ProcessStatus[proc];
+	LinkClose[link];
+]
+
+
+(* ::Subsection:: *)
+(*Iterative solution of DEs*)
+
+
+Wrap::usage = "Wrap[x, a] stands for \!\(\*FractionBox[\(1\), \(x - a\)]\). "
+
+
+WrapLinearFraction::usage = "WrapLinearFraction[m, x] extracts linear fractions in matrix m and wraps \
+them by Wrap[x, a]. "
+WrapLinearFraction[m_?MatrixQ, x_] := With[{
+		polesFinite = Union@Flatten[SolveValues[Denominator@Together[#] == 0,x]& /@ Flatten[m]]
+	},
+	Apart[Factor[m, Extension -> polesFinite], x] /. {1/(a_. x + b_.) :> 1/a Wrap[x, -b/a]}
+]
+
+
+IntGPL::usage = "IntGPL[expr, x] evaluates the indefinite integral of GPLs in expr with repect to x. ";
+IntGPL[expr_List, x_] := IntGPL[#, x]& /@ expr
+IntGPL[0, x_] := 0
+IntGPL[expr_, x_] := With[{exprEx = Expand[expr]}, IntGPL[exprEx, x] /; exprEx=!=expr]
+IntGPL[expr_Plus, x_] := IntGPL[#, x]& /@ expr
+IntGPL[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntGPL[subexpr, x]
+IntGPL[Wrap[x_, a_], x_] := GPL[a, x]
+IntGPL[Wrap[x_, a_]GPL[r__, x_], x_] := GPL[a, r, x]
+
+
+DysonGPL::usage = "DysonGPL[m, {x, x0, order}] calculates the matrix version of the Dyson series \
+of the DEs with coefficient matrix m. Note that this function is a naive implementation for the \
+iterative solution of the DEs. For high-order iterative solution, DysonGPLWithAsy[] may be more \
+efficient. ";
+DysonGPL::unknowint = "Some integrals cannot be expressed by GPLs. ";
+DysonGPL[m_?MatrixQ, {x_, x0_, order_}] := Enclose[With[{
+		mat = WrapLinearFraction[m, x]
+	},
+	NestList[
+		With[{int = ConfirmBy[IntGPL[(mat . #), x],
+			FreeQ[#, IntGPL]&, Message[DysonGPL::unknowint]
+		]}, int - (int /. x->x0)]&,
+		IdentityMatrix[Length[mat]],
+		order
+	]
+], $Failed&]
+
+
+DysonGPLWithAsy::usage = "DysonGPLWithAsy[m, x, i0] calculates the Dyson series of the DEs with \
+given asymptotic solution i0 near x = 0. Note that the rows of i0 correspond to different integral \
+basis, the columns of i0 correspond to the increasing \[Epsilon] orders. ";
+DysonGPLWithAsy::pltfail = "Failed to start the PolyLogTools pcocess. ";
+DysonGPLWithAsy::unknowint = "Some integrals cannot be expressed by GPLs. ";
+DysonGPLWithAsy::asymismatch = "The asymptotic solution does not match the DEs. ";
+DysonGPLWithAsy[m_?MatrixQ, x_, i0_?MatrixQ] := Enclose[Module[{
+		mat = WrapLinearFraction[m, x],
+		order = Dimensions[i0][[2]] - 1,
+		plt = Confirm[StartPLT["plt-internal"], Message[DysonGPLWithAsy::pltfail]],
+		x0, boundary, GPLx0List, GPLx0AsyList
+	},
+	WithCleanup[
+		Transpose@FoldList[
+			With[{int = ConfirmBy[IntGPL[(mat . #1), x],
+					FreeQ[#, IntGPL]&, Message[DysonGPLWithAsy::unknowint]
+				]}, 
+				boundary = -(int /. x->x0) + (i0[[;;, #2]] /. Log[x] -> GPL[0, x] /. x->x0);
+				GPLx0List = DDCasesAll[boundary, GPL[__, x0]];
+				GPLx0AsyList = CallPLT[Global`ExpandPolyLogs[GPLx0List, {x0, 0, 0}], plt];
+				Plus[int,
+					ConfirmBy[
+						Collect[boundary /. Thread[GPLx0List -> GPLx0AsyList], GPL[0, x0], Factor],
+						FreeQ[#, x0]&, Message[DysonGPLWithAsy::asymismatch]
+					]
+				]
+			]&,
+			i0[[;;, 1]],
+			Range[order] + 1
+		],
+		KillPLT[plt]
+	]
+], $Failed&]
 
 
 (* ::Section:: *)
