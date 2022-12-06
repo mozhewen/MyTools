@@ -5,7 +5,7 @@
 (**)
 (*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.10.28*)
+(*Last update: 2022.12.7*)
 
 
 ClearAll[EnumSP]
@@ -20,6 +20,8 @@ ClearAll[Idx2j, j2Idx]
 ClearAll[NSeries0]
 ClearAll[DDCasesAll]
 ClearAll[AddToAssoc, RemoveFromAssoc]
+
+ClearAll[LeadingAsymptotic0]
 
 ClearAll[MapAllStruct]
 ClearAll[MapAtValues]
@@ -148,6 +150,43 @@ RemoveFromAssoc::usage =
 "RemoveFromAssoc[assoc, key] removes key from assoc. 
 RemoveFromAssoc[assoc, key1, key2, ...] removes a sequence of keys from assoc. ";
 RemoveFromAssoc[assoc_, keys__] := (assoc = Delete[assoc, {Key[#]}&/@{keys}])
+
+
+(* ::Section:: *)
+(*Asymptotics*)
+
+
+ClearAll[LeadingAsymptotic0Internal]
+LeadingAsymptotic0Internal::unsupp = "Unsupported functional form ``";
+LeadingAsymptotic0Internal[HoldPattern@Plus[a__], x_] := Module[{
+		mono = LeadingAsymptotic0Internal[#, x]& /@ {a},
+		lo
+	},
+	lo = Min@@mono[[;;, 1]];
+	{lo, Total@Cases[mono, {lo, ex_} :> ex]}
+]
+LeadingAsymptotic0Internal[HoldPattern@Times[a__], x_] := Module[{
+		mono = LeadingAsymptotic0Internal[#, x]& /@ {a}
+	},
+	{Total[mono[[;;, 1]]], Times@@(mono[[;;, 2]])}
+]
+LeadingAsymptotic0Internal[a_^p_, x_] /; FreeQ[p, x] := Module[{
+		mono = LeadingAsymptotic0Internal[a, x]
+	},
+	{mono[[1]] p, mono[[2]]^p}
+]
+LeadingAsymptotic0Internal[(h:UnitStep|HeavisideTheta)[a__], x_] := Module[{
+		mono = LeadingAsymptotic0Internal[#, x]& /@ {a}
+	},
+	{0, h@@(mono[[;;, 2]])}
+]
+LeadingAsymptotic0Internal[DiracDelta[a_], x_] := 
+	{-#1, DiracDelta[#2]}& @@ LeadingAsymptotic0Internal[a, x]
+LeadingAsymptotic0Internal[x_, x_] := {1, x}
+LeadingAsymptotic0Internal[a_, x_] /; FreeQ[a, x] := {0, a}
+LeadingAsymptotic0Internal[a_, x_] := (Message[LeadingAsymptotic0Internal::unsupp, a]; Abort[])
+
+LeadingAsymptotic0[a_, x_]:=LeadingAsymptotic0Internal[a, x][[2]]
 
 
 (* ::Section:: *)

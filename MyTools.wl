@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.10.27*)
+(*Last update: 2022.12.7*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -50,16 +50,17 @@ ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
 ClearAll[MakeSymPair]
 
+ClearAll[FC2Plain, Plain2FC]
 ClearAll[SInt]
 ClearAll[FC2SInt]
-ClearAll[FC2Plain]
-ClearAll[Plain2FC]
 ClearAll[Idx2SInt]
+ClearAll[SInt2Explicit]
 
 ClearAll[RS]
 
 ClearAll[DisplaySInt]
 
+ClearAll[Baikov]
 ClearAll[\[Alpha]]
 ClearAll[\[CapitalDelta]0, FP]
 ClearAll[UF]
@@ -192,11 +193,27 @@ MakeSymPair[lis_List] := With[{f = First[lis], r = Rest[lis]},
 
 
 (* ::Subsection:: *)
-(*Functions that are used by user*)
-
-
-(* ::Subsubsection:: *)
 (*Change representation*)
+
+
+FC2Plain::usage =
+"FC2Plain[expr] converts the quadratic form expr in FeynCalc's Pair[] form into the plain Times[] form. ";
+FC2Plain[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
+
+
+Plain2FC::usage = 
+"Plain2FC[expr, kList] converts the quadratic form expr in the plain Times[] form into FeynCalc's Pair[] form. ";
+Plain2FC[expr_, kList_List] :=
+	Enclose@If[Confirm@MomentumQ[expr, kList],
+		expr /. {a:(Alternatives@@kList) :> Momentum[a, D]}
+	,(*Else*)
+		expr /. {
+			a_^2/;MomentumQ[a, kList] :> 
+				Pair@@({a, a}/.{k:(Alternatives@@kList) :> Momentum[k, D]}),
+			a_ b_/;MomentumQ[a, kList]&&MomentumQ[b, kList] :> 
+				Pair@@({a, b}/.{k:(Alternatives@@kList) :> Momentum[k, D]})
+		}
+	]
 
 
 SInt::usage =
@@ -222,26 +239,6 @@ FC2SInt[expr_, lList_List, OptionsPattern[]] := FeynAmpDenominatorCombine[expr] 
 		]
 
 
-FC2Plain::usage =
-"FC2Plain[expr] converts the quadratic form expr in FeynCalc's Pair[] form into the plain Times[] form. ";
-FC2Plain[expr_] := FCI[expr] /. Momentum[a_, ___] :> a /. Pair[a_, b_] :> a b
-
-
-Plain2FC::usage = 
-"Plain2FC[expr, kList] converts the quadratic form expr in the plain Times[] form into FeynCalc's Pair[] form. ";
-Plain2FC[expr_, kList_List] :=
-	Enclose@If[Confirm@MomentumQ[expr, kList],
-		expr /. {a:(Alternatives@@kList) :> Momentum[a, D]}
-	,(*Else*)
-		expr /. {
-			a_^2/;MomentumQ[a, kList] :> 
-				Pair@@({a, a}/.{k:(Alternatives@@kList) :> Momentum[k, D]}),
-			a_ b_/;MomentumQ[a, kList]&&MomentumQ[b, kList] :> 
-				Pair@@({a, b}/.{k:(Alternatives@@kList) :> Momentum[k, D]})
-		}
-	]
-
-
 Idx2SInt::usage = 
 "Idx2SInt[expr, basis] reconstructs SInt[] forms from Idx[] expression expr with respect to basis. 
 \"KeepOrder\" \[Rule] False | True
@@ -253,7 +250,12 @@ Idx2SInt[expr_, basis_List, OptionsPattern[]] := expr /. Idx[idx__] :>
 	SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@DeleteCases[{basis, {idx}}\[Transpose], {_, 0}]
 
 
-(* ::Subsubsection:: *)
+SInt2Explicit::usage = 
+"SInt2Explicit[expr] converts SInt[] into a explicit fraction";
+SInt2Explicit[expr_] := expr /. SInt[props__] :> Times@@Cases[{props}, {x_, a_} :> x^-a]
+
+
+(* ::Subsection:: *)
 (*Statistics*)
 
 
@@ -266,7 +268,7 @@ RS[sint_SInt, assum_:{}] := {
 }
 
 
-(* ::Subsubsection:: *)
+(* ::Subsection:: *)
 (*Typesetting*)
 
 
@@ -304,8 +306,26 @@ DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
 	]
 
 
-(* ::Subsubsection:: *)
-(*\[Alpha]-parameterization*)
+(* ::Subsection:: *)
+(*Baikov representation*)
+
+
+Baikov::usage =
+"Baikov[int, ext, d] returns the integration measure of the d-dimensional integral of \
+int = {\!\(\*SubscriptBox[\(l\), \(1\)]\), \!\(\*SubscriptBox[\(l\), \(2\)]\), \[Ellipsis]} with external momenta ext = {\!\(\*SubscriptBox[\(p\), \(1\)]\), \!\(\*SubscriptBox[\(p\), \(2\)]\), \[Ellipsis]}, \!\(\*SuperscriptBox[\(\[DifferentialD]\), \(d\)]\)\!\(\*SubscriptBox[\(l\), \(1\)]\) \!\(\*SuperscriptBox[\(\[DifferentialD]\), \(d\)]\)\!\(\*SubscriptBox[\(l\), \(2\)]\)\[CenterEllipsis] \[Rule] (\[Ellipsis]return\[Ellipsis]) \[DifferentialD]\!\(\*SubscriptBox[\(s\), \(11\)]\) \[DifferentialD]\!\(\*SubscriptBox[\(s\), \(12\)]\)\[CenterEllipsis], \
+where \!\(\*SubscriptBox[\(q\), \(i\)]\) = {\!\(\*SubscriptBox[\(l\), \(1\)]\), \[Ellipsis], \!\(\*SubscriptBox[\(p\), \(1\)]\), \[Ellipsis]} and \!\(\*SubscriptBox[\(s\), \(ij\)]\) = \!\(\*SubscriptBox[\(q\), \(i\)]\)\[CenterDot]\!\(\*SubscriptBox[\(q\), \(j\)]\). ";
+Baikov[int_List, ext_List, d_] :=
+	With[{L = Length[int], EE = Length[ext], all = Join[int, ext]},
+	With[{M = L+EE, NN = 1/2 L(L+1)+L EE},
+		Simplify@Times[
+			\[Pi]^((L(d+1)-NN)/2)/Product[Gamma[(d-M+i)/2], {i, L}],
+			((-1)^(M-1) Det@Outer[FCI@*SP, all, all])^((d-M-1)/2)/((-1)^(EE-1) Det@Outer[FCI@*SP, ext, ext])^((d-EE-1)/2)
+		]
+	]]
+
+
+(* ::Subsection:: *)
+(*Feynman & \[Alpha]-parameterization*)
 
 
 \[Alpha]::usage = "\[Alpha] parameter returned by UF[] and AP[]. ";
@@ -596,6 +616,10 @@ AP[sint_SInt, lList_List, d_, OptionsPattern[]] :=
 	]
 
 
+(* ::Subsection:: *)
+(*Reduction to a given basis*)
+
+
 CompleteBasis::usage =
 "CompleteBasis[basis, int, ext, \"AuxiliaryBasis\" \[Rule] {aux1, aux2, ...}] completes basis with respect to \
 the specific auxiliary basis aux1, aux2, ... ";
@@ -756,7 +780,7 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 	]
 
 
-(* ::Subsubsection::Closed:: *)
+(* ::Subsection::Closed:: *)
 (*FIRE interface*)
 
 
@@ -860,7 +884,7 @@ GetFIRETables[problemName_String, OptionsPattern[]] :=
 	]	
 
 
-(* ::Subsubsection::Closed:: *)
+(* ::Subsection::Closed:: *)
 (*Kira interface*)
 
 
