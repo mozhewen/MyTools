@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.12.5*)
+(*Last update: 2022.12.15*)
 (**)
 (*TODO: *)
 (*	(None)*)
@@ -62,6 +62,7 @@ ClearAll[GPL2HPL, StartPLT, CallPLT, KillPLT]
 
 ClearAll[Wrap, WrapLinearFraction]
 ClearAll[GPL, IntGPL, DysonGPL, DysonGPLWithAsy]
+ClearAll[WrapEpsPow, IntAsy, DysonAsy]
 
 Begin["`Private`"]
 
@@ -74,7 +75,7 @@ Begin["`Private`"]
 pd = DirectoryName[$InputFileName];
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Utilities*)
 
 
@@ -101,7 +102,7 @@ PD[expr_?(FreeQ[#, _Idx]&), x_^i_.] := Cancel[1/(i x^(i-1)) \!\(
 PD[idx_Idx, x_^i_] := Collect[1/(i x^(i-1)) PD[idx, x], _Idx]
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*FIRE interface*)
 
 
@@ -189,7 +190,7 @@ RunFIRE[pn_Integer, problemName_String, intName_String, idxList_List, OptionsPat
 	]
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Kira interface*)
 
 
@@ -346,7 +347,7 @@ RunKira[topoName_String, idxList_List, OptionsPattern[]] :=
 	]
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*Polylogarithms*)
 
 
@@ -362,7 +363,7 @@ StartPLT[linkName_String:"plt1"] := Enclose[<|
 		{"wolframscript", "-file", FileNameJoin[{pd, "callPLT.wls"}], linkName},
 		ProcessDirectory -> $PLTHome
 	]
-|>, $Failed&]
+|>, (LinkClose[linkName];$Failed)&]
 
 
 CallPLT::usage = "CallPLT[expr, pltObj] evaluates expr by PolyLogTools. ";
@@ -394,11 +395,11 @@ KillPLT[pltObj_Association] := With[{
 (*Iterative solution of DEs*)
 
 
-Wrap::usage = "Wrap[x, a] stands for \!\(\*FractionBox[\(1\), \(x - a\)]\). "
+Wrap::usage = "Wrap[x, a] stands for \!\(\*FractionBox[\(1\), \(x - a\)]\). ";
 
 
-WrapLinearFraction::usage = "WrapLinearFraction[m, x] extracts linear fractions in matrix m and wraps \
-them by Wrap[x, a]. "
+WrapLinearFraction::usage = 
+"WrapLinearFraction[m, x] extracts linear fractions in matrix m and wraps them by Wrap[x, a]. ";
 WrapLinearFraction[m_?MatrixQ, x_] := With[{
 		polesFinite = Union@Flatten[SolveValues[Denominator@Together[#] == 0,x]& /@ Flatten[m]]
 	},
@@ -412,6 +413,7 @@ IntGPL[0, x_] := 0
 IntGPL[expr_, x_] := With[{exprEx = Expand[expr]}, IntGPL[exprEx, x] /; exprEx=!=expr]
 IntGPL[expr_Plus, x_] := IntGPL[#, x]& /@ expr
 IntGPL[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntGPL[subexpr, x]
+
 IntGPL[Wrap[x_, a_], x_] := GPL[a, x]
 IntGPL[Wrap[x_, a_]GPL[r__, x_], x_] := GPL[a, r, x]
 
@@ -465,6 +467,65 @@ DysonGPLWithAsy[m_?MatrixQ, x_, i0_?MatrixQ] := Enclose[Module[{
 			Range[order] + 1
 		],
 		KillPLT[plt]
+	]
+], $Failed&]
+
+
+WrapEpsPow::usage = 
+"WrapEpsPow[m, {x, order}, eps] extracts \!\(\*SuperscriptBox[\(x\), \(a\\\ eps\)]\) in matrix m, then expands m to O[x]^order, \
+assuming m starts from O[x]^0. ";
+WrapEpsPow::unsuppfun = "Unsupported functional form. "
+WrapEpsPow[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{Pow}, With[{
+		ser = NSeries0[
+			m /. x^a_/;Not@FreeQ[a, eps]:> x^Coefficient[a, eps, 0] Pow[Factor[a-Coefficient[a, eps, 0]]], 
+			x, order
+		]
+	},
+	Table[Coefficient[ser, x, i] x^i /. Pow[a_] :> x^a, {i, 0, order}]
+]], $Failed&]
+
+
+IntAsy::usage = "IntAsy[expr, x] evaluates the indefinite integral \[Integral]\[DifferentialD]x of \!\(\*SuperscriptBox[\(x\), \(a\)]\) in expr. ";
+IntAsy[expr_List, x_] := IntAsy[#, x]& /@ expr
+IntAsy[0, x_] := 0
+IntAsy[expr_Plus, x_] := IntAsy[#, x]& /@ expr
+IntAsy[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntAsy[subexpr, x]
+
+IntAsy[x_^a_., x_] := 1/(a+1) x^(a+1)
+IntAsy[c_, x_]/;FreeQ[c, x] := c x
+
+
+DysonAsy::usage = 
+"DysonAsy[m, {x, order}, eps] calculates the Dyson series of the DEs near x = 0 with given \
+boundary conditions C[i]. m is assumed to be free of 1/x poles as x \[Rule] 0. ";
+DysonAsy::unknowint = "Some integrals cannot be calculated, e.g., ``. ";
+DysonAsy[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{
+		n = Dimensions[m][[1]],
+		mat = WrapEpsPow[m, {x, order}, eps], conv
+	},
+	With[{rs = FoldList[
+		ConfirmBy[
+			conv = Table[
+				IntAsy[
+					Expand[
+						Sum[mat[[o-i(*x^(o-i-1)*)]] . #1[[i-#2+2(*x^i*)]], {i, #2-1, Min[o-1, Length[#1]+#2-2]}]		
+					], 
+					x
+				],
+				{o, #2, order}
+			],
+			FreeQ[#, IntAsy]&, Message[DysonAsy::unknowint, FirstCase[conv, _IntAsy, Null, {0, \[Infinity]}]]
+		]&,
+		{IdentityMatrix[n]},
+		Range[order]
+	]},
+		Table[If[o === 0,
+				rs[[1, 1]]
+			(*Else*),
+				Sum[rs[[i+1, o-i+1]], {i, 1, o}]
+			],
+			{o, 0, order}
+		]
 	]
 ], $Failed&]
 

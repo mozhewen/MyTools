@@ -10,7 +10,7 @@
 
 ClearAll[EnumSP]
 ClearAll[MomentumQ]
-ClearAll[ToSqForm]
+ClearAll[QuadV, ToSqForm]
 ClearAll[\[CapitalOmega]]
 
 j;
@@ -78,17 +78,28 @@ MomentumQ[p:Power[a_, i_], kList_List] :=
 MomentumQ[sym_, kList_List] := MatchQ[sym, Alternatives@@kList]
 
 
+QuadV::usage = "QuadV[a, x, h, k] stands for a (x - h\!\(\*SuperscriptBox[\()\), \(2\)]\) + k. ";
+
 ToSqForm::usage = 
 "ToSqForm[quad, l, SPrules:{}] constructs the standard form of quadratic form quad with respect to variable l. \
 SPrules is used to simplify scalar products of the constant term. 
 ToSqForm[quad, {\!\(\*SubscriptBox[\(l\), \(1\)]\), \!\(\*SubscriptBox[\(l\), \(2\)]\), ...}, SPrules:{}] uses \
-the first \!\(\*SubscriptBox[\(l\), \(i\)]\) that appears in quad as the variable. ";
-ToSqForm[quadList_List, l_, SPrules_:{}] := ToSqForm[#, l, SPrules]& /@ quadList
-ToSqForm[quad_, lList_List, SPrules_:{}] := ToSqForm[quad, FirstCase[lList, _?(MemberQ[Variables[quad],#]&)], SPrules]
-ToSqForm[quad_, l_, SPrules_:{}] := 
+the first \!\(\*SubscriptBox[\(l\), \(i\)]\) that appears in quad as the variable. 
+\"QuadV\" \[Rule] False | True
+	Whether use QuadV[] as a wrapper. 
+";
+Options[ToSqForm] = {
+	"QuadV" -> False
+};
+ToSqForm[quadList_List, l_, SPrules_List:{}, op:OptionsPattern[]] := ToSqForm[#, l, SPrules, op]& /@ quadList
+ToSqForm[quad_, lList_List, SPrules_List:{}, op:OptionsPattern[]] := ToSqForm[quad, FirstCase[lList, _?(MemberQ[Variables[quad],#]&)], SPrules, op]
+ToSqForm[quad_, l_, SPrules_List:{}, OptionsPattern[]] := 
 	Module[{a = Coefficient[quad, l, 2], b = Coefficient[quad, l, 1], c = Coefficient[quad, l, 0]},
 		If[a =!= 0,
-			a (Expand[l + b/(2a)])^2- Together[Expand[(b^2 - 4 a c)/(4a)]//.SPrules]
+			If[OptionValue["QuadV"],
+				QuadV[a, l, -b/(2a), Together[Expand[(4 a c - b^2 )/(4a)]//.SPrules]],
+				a (Expand[l + b/(2a)])^2 - Together[Expand[(4 a c - b^2)/(4a)]//.SPrules]
+			]
 		,(*Else*)
 			quad
 		]
@@ -129,8 +140,8 @@ j2Idx[expr_] :=
 
 NSeries0::usage = 
 "NSeries0[expr, eps, order] is a wrapper for Normal@Series[expr, {eps, 0, order}]. "
-NSeries0[expr_, eps_, order_] := Normal@Series[expr, {eps, 0, order}]
-NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, Assumptions -> assum]
+NSeries0[expr_, eps_, order_] := Normal@Series[expr, {eps, 0, order}, Analytic -> False]
+NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, Assumptions -> assum, Analytic -> False]
 
 
 DDCasesAll::usage =
@@ -157,36 +168,45 @@ RemoveFromAssoc[assoc_, keys__] := (assoc = Delete[assoc, {Key[#]}&/@{keys}])
 
 
 ClearAll[LeadingAsymptotic0Internal]
+LeadingAsymptotic0Internal::indef = "Indefinite orders in ``";
 LeadingAsymptotic0Internal::unsupp = "Unsupported functional form ``";
-LeadingAsymptotic0Internal[HoldPattern@Plus[a__], x_] := Module[{
-		mono = LeadingAsymptotic0Internal[#, x]& /@ {a},
-		lo
+LeadingAsymptotic0Internal[HoldPattern@Plus[a__], varOrder__List] := Module[{
+		mono = LeadingAsymptotic0Internal[#, varOrder]& /@ {a},
+		lo, vars
 	},
-	lo = Min@@mono[[;;, 1]];
-	{lo, Total@Cases[mono, {lo, ex_} :> ex]}
+	vars = Variables[mono[[;;, 1]]];
+	lo = Simplify[Min@@mono[[;;, 1]], AllTrue[vars, #\[Element]Reals&]];
+	If[Not@FreeQ[lo, _Min], 
+		Message[LeadingAsymptotic0Internal::indef, Plus[a]]; Abort[]
+	];
+	{lo, Total@Cases[mono, {lo2_/;Expand[lo2 == lo], ex_} :> ex]}
 ]
-LeadingAsymptotic0Internal[HoldPattern@Times[a__], x_] := Module[{
-		mono = LeadingAsymptotic0Internal[#, x]& /@ {a}
+LeadingAsymptotic0Internal[HoldPattern@Times[a__], varOrder__List] := Module[{
+		mono = LeadingAsymptotic0Internal[#, varOrder]& /@ {a}
 	},
 	{Total[mono[[;;, 1]]], Times@@(mono[[;;, 2]])}
 ]
-LeadingAsymptotic0Internal[a_^p_, x_] /; FreeQ[p, x] := Module[{
-		mono = LeadingAsymptotic0Internal[a, x]
+LeadingAsymptotic0Internal[a_^p_, varOrder__List] /; FreeQ[p, Alternatives@@({varOrder}[[;;, 1]])] := Module[{
+		mono = LeadingAsymptotic0Internal[a, varOrder]
 	},
 	{mono[[1]] p, mono[[2]]^p}
 ]
-LeadingAsymptotic0Internal[(h:UnitStep|HeavisideTheta)[a__], x_] := Module[{
-		mono = LeadingAsymptotic0Internal[#, x]& /@ {a}
+LeadingAsymptotic0Internal[(h:UnitStep|HeavisideTheta)[a__], varOrder__List] := Module[{
+		mono = LeadingAsymptotic0Internal[#, varOrder]& /@ {a}
 	},
 	{0, h@@(mono[[;;, 2]])}
 ]
-LeadingAsymptotic0Internal[DiracDelta[a_], x_] := 
-	{-#1, DiracDelta[#2]}& @@ LeadingAsymptotic0Internal[a, x]
-LeadingAsymptotic0Internal[x_, x_] := {1, x}
-LeadingAsymptotic0Internal[a_, x_] /; FreeQ[a, x] := {0, a}
-LeadingAsymptotic0Internal[a_, x_] := (Message[LeadingAsymptotic0Internal::unsupp, a]; Abort[])
+LeadingAsymptotic0Internal[DiracDelta[a_], varOrder__List] := 
+	{-#1, DiracDelta[#2]}& @@ LeadingAsymptotic0Internal[a, varOrder]
+LeadingAsymptotic0Internal[x_, varOrder__List] := FirstCase[{varOrder}, 
+	{x, ord_} :> {ord, x}, 
+	If[FreeQ[x, Alternatives@@({varOrder}[[;;, 1]])], 
+		{0, x},
+		Message[LeadingAsymptotic0Internal::unsupp, x]; Abort[]
+	]
+]
 
-LeadingAsymptotic0[a_, x_]:=LeadingAsymptotic0Internal[a, x][[2]]
+LeadingAsymptotic0[a_, varOrder__List]:=LeadingAsymptotic0Internal[a, varOrder][[2]]
 
 
 (* ::Section:: *)

@@ -313,13 +313,18 @@ DisplaySInt[expr_, lList_List, OptionsPattern[]] :=
 Baikov::usage =
 "Baikov[int, ext, d] returns the integration measure of the d-dimensional integral of \
 int = {\!\(\*SubscriptBox[\(l\), \(1\)]\), \!\(\*SubscriptBox[\(l\), \(2\)]\), \[Ellipsis]} with external momenta ext = {\!\(\*SubscriptBox[\(p\), \(1\)]\), \!\(\*SubscriptBox[\(p\), \(2\)]\), \[Ellipsis]}, \!\(\*SuperscriptBox[\(\[DifferentialD]\), \(d\)]\)\!\(\*SubscriptBox[\(l\), \(1\)]\) \!\(\*SuperscriptBox[\(\[DifferentialD]\), \(d\)]\)\!\(\*SubscriptBox[\(l\), \(2\)]\)\[CenterEllipsis] \[Rule] (\[Ellipsis]return\[Ellipsis]) \[DifferentialD]\!\(\*SubscriptBox[\(s\), \(11\)]\) \[DifferentialD]\!\(\*SubscriptBox[\(s\), \(12\)]\)\[CenterEllipsis], \
-where \!\(\*SubscriptBox[\(q\), \(i\)]\) = {\!\(\*SubscriptBox[\(l\), \(1\)]\), \[Ellipsis], \!\(\*SubscriptBox[\(p\), \(1\)]\), \[Ellipsis]} and \!\(\*SubscriptBox[\(s\), \(ij\)]\) = \!\(\*SubscriptBox[\(q\), \(i\)]\)\[CenterDot]\!\(\*SubscriptBox[\(q\), \(j\)]\). ";
-Baikov[int_List, ext_List, d_] :=
+where \!\(\*SubscriptBox[\(q\), \(i\)]\) = {\!\(\*SubscriptBox[\(l\), \(1\)]\), \[Ellipsis], \!\(\*SubscriptBox[\(p\), \(1\)]\), \[Ellipsis]} and \!\(\*SubscriptBox[\(s\), \(ij\)]\) = \!\(\*SubscriptBox[\(q\), \(i\)]\)\[CenterDot]\!\(\*SubscriptBox[\(q\), \(j\)]\). 
+\"WrapIn\" -> f
+	Wrap the most complicated Gram determinant in f[]. ";
+Options[Baikov] = {
+	"WrapIn" -> Identity
+}
+Baikov[int_List, ext_List, d_, OptionsPattern[]] :=
 	With[{L = Length[int], EE = Length[ext], all = Join[int, ext]},
 	With[{M = L+EE, NN = 1/2 L(L+1)+L EE},
 		Simplify@Times[
 			\[Pi]^((L(d+1)-NN)/2)/Product[Gamma[(d-M+i)/2], {i, L}],
-			((-1)^(M-1) Det@Outer[FCI@*SP, all, all])^((d-M-1)/2)/((-1)^(EE-1) Det@Outer[FCI@*SP, ext, ext])^((d-EE-1)/2)
+			OptionValue["WrapIn"][(-1)^(M-1) Det@Outer[FCI@*SP, all, all]]^((d-M-1)/2)/((-1)^(EE-1) Det@Outer[FCI@*SP, ext, ext])^((d-EE-1)/2)
 		]
 	]]
 
