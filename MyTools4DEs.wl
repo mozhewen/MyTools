@@ -8,10 +8,13 @@
 (**)
 (*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.12.15*)
+(*Last update: 2022.12.25*)
+(**)
+(*NOTE: *)
+(*	1. Series[] has been redefined in Libra. *)
 (**)
 (*TODO: *)
-(*	(None)*)
+(*	(none)*)
 
 
 (* ::Section:: *)
@@ -40,7 +43,7 @@ If[!ValueQ[Global`$FermatExecutable],
 
 
 If[!ValueQ[Global`$PLTHome],
-	MyTools4DEs`$PLTHome = "E:\\Loops\\Packages\\plt",
+	MyTools4DEs`$PLTHome = "/media/mozhewen/T7/Loops/Packages/plt",
 	MyTools4DEs`$PLTHome = Global`$PLTHome;
 	Remove[Global`$PLTHome]
 ]
@@ -62,7 +65,7 @@ ClearAll[GPL2HPL, StartPLT, CallPLT, KillPLT]
 
 ClearAll[Wrap, WrapLinearFraction]
 ClearAll[GPL, IntGPL, DysonGPL, DysonGPLWithAsy]
-ClearAll[WrapEpsPow, IntAsy, DysonAsy]
+ClearAll[WrapEpsPow, IntAsy, DysonAsy, DysonAsyCanonical]
 
 Begin["`Private`"]
 
@@ -351,19 +354,32 @@ RunKira[topoName_String, idxList_List, OptionsPattern[]] :=
 (*Polylogarithms*)
 
 
-GPL2HPL::usage = "G2HPL[expr] converts GPL[] in expr into HPL[] by the convention of HPL.m (a-notation). "
-GPL2HPL[expr_] := expr /. {GPL[r:((0|1|-1)..), x_] :> (-1)^Count[{r}, 1] HPL`HPL[{r}, x]}
+GPL2HPL::usage = "GPL2HPL[expr] converts GPL[] in expr into HPL[] by the convention of HPL.m (a-notation). "
+GPL2HPL[expr_] := With[{GPLList = DDCasesAll[expr, _GPL]},
+	expr /. Thread[GPLList -> Replace[GPLList,
+		GPL[r:((0|1|-1)..), x_] :> (-1)^Count[{r}, 1] HPL`HPL[{r}, x],
+		{1}
+	]]
+]
 
 
 StartPLT::usage = "StartPLT[linkName] starts a new process running PolyLogTools and returns the process \
 information. ";
-StartPLT[linkName_String:"plt1"] := Enclose[<|
-	"Link" -> ConfirmQuiet@LinkCreate[linkName],
-	"Process" -> ConfirmQuiet@StartProcess[
-		{"wolframscript", "-file", FileNameJoin[{pd, "callPLT.wls"}], linkName},
-		ProcessDirectory -> $PLTHome
+StartPLT[linkName_String:""] := Module[{link, proc, realName},
+	Enclose[
+		link = ConfirmQuiet@If[linkName === "", LinkCreate[], LinkCreate[linkName]];
+		realName = First[link];
+		proc = ConfirmQuiet@StartProcess[
+			{"wolframscript", "-file", FileNameJoin[{pd, "callPLT.wls"}], realName},
+			ProcessDirectory -> $PLTHome
+		];
+		<|
+			"Link" -> link,
+			"Process" -> proc
+		|>,
+		Quiet[LinkClose[link]; KillProcess[proc]; $Failed]&
 	]
-|>, (LinkClose[linkName];$Failed)&]
+]
 
 
 CallPLT::usage = "CallPLT[expr, pltObj] evaluates expr by PolyLogTools. ";
@@ -395,6 +411,10 @@ KillPLT[pltObj_Association] := With[{
 (*Iterative solution of DEs*)
 
 
+(* ::Subsubsection:: *)
+(*Full solution*)
+
+
 Wrap::usage = "Wrap[x, a] stands for \!\(\*FractionBox[\(1\), \(x - a\)]\). ";
 
 
@@ -418,12 +438,12 @@ IntGPL[Wrap[x_, a_], x_] := GPL[a, x]
 IntGPL[Wrap[x_, a_]GPL[r__, x_], x_] := GPL[a, r, x]
 
 
-DysonGPL::usage = "DysonGPL[m, {x, x0, order}] calculates the matrix version of the Dyson series \
+DysonGPL::usage = "DysonGPL[m, {x, x0}, order] calculates the matrix version of the Dyson series \
 of the DEs with coefficient matrix m. Note that this function is a naive implementation for the \
 iterative solution of the DEs. For high-order iterative solution, DysonGPLWithAsy[] may be more \
 efficient. ";
 DysonGPL::unknowint = "Some integrals cannot be expressed by GPLs. ";
-DysonGPL[m_?MatrixQ, {x_, x0_, order_}] := Enclose[With[{
+DysonGPL[m_?MatrixQ, {x_, x0_}, order_] := Enclose[With[{
 		mat = WrapLinearFraction[m, x]
 	},
 	NestList[
@@ -439,13 +459,13 @@ DysonGPL[m_?MatrixQ, {x_, x0_, order_}] := Enclose[With[{
 DysonGPLWithAsy::usage = "DysonGPLWithAsy[m, x, i0] calculates the Dyson series of the DEs with \
 given asymptotic solution i0 near x = 0. Note that the rows of i0 correspond to different integral \
 basis, the columns of i0 correspond to the increasing \[Epsilon] orders. ";
-DysonGPLWithAsy::pltfail = "Failed to start the PolyLogTools pcocess. ";
+DysonGPLWithAsy::pltfail = "Failed to start a PolyLogTools process. ";
 DysonGPLWithAsy::unknowint = "Some integrals cannot be expressed by GPLs. ";
 DysonGPLWithAsy::asymismatch = "The asymptotic solution does not match the DEs. ";
-DysonGPLWithAsy[m_?MatrixQ, x_, i0_?MatrixQ] := Enclose[Module[{
+DysonGPLWithAsy[m_?MatrixQ, x_, i0_?MatrixQ] := Enclose@Module[{
 		mat = WrapLinearFraction[m, x],
 		order = Dimensions[i0][[2]] - 1,
-		plt = Confirm[StartPLT["plt-internal"], Message[DysonGPLWithAsy::pltfail]],
+		plt = Confirm[StartPLT[], Message[DysonGPLWithAsy::pltfail]],
 		x0, boundary, GPLx0List, GPLx0AsyList
 	},
 	WithCleanup[
@@ -468,7 +488,11 @@ DysonGPLWithAsy[m_?MatrixQ, x_, i0_?MatrixQ] := Enclose[Module[{
 		],
 		KillPLT[plt]
 	]
-], $Failed&]
+]
+
+
+(* ::Subsubsection:: *)
+(*Asymptotic solution*)
 
 
 WrapEpsPow::usage = 
@@ -476,28 +500,35 @@ WrapEpsPow::usage =
 assuming m starts from O[x]^0. ";
 WrapEpsPow::unsuppfun = "Unsupported functional form. "
 WrapEpsPow[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{Pow}, With[{
-		ser = NSeries0[
+		ser = Series[
 			m /. x^a_/;Not@FreeQ[a, eps]:> x^Coefficient[a, eps, 0] Pow[Factor[a-Coefficient[a, eps, 0]]], 
-			x, order
-		]
+			{x, 0, order},
+			Analytic -> False
+		] + SeriesData[x, 0, {}, order+1, order+1, 1] (* Force SeriesData[] *)
 	},
-	Table[Coefficient[ser, x, i] x^i /. Pow[a_] :> x^a, {i, 0, order}]
+	ConfirmAssert[AllTrue[ser, Head[#] === SeriesData&, 2], Message[WrapEpsPow::unsuppfun]];
+	Table[Map[(SeriesCoefficient[#, i] x^i /. Pow[a_] :> x^a)&, ser, {2}], {i, 0, order}]
 ]], $Failed&]
 
 
-IntAsy::usage = "IntAsy[expr, x] evaluates the indefinite integral \[Integral]\[DifferentialD]x of \!\(\*SuperscriptBox[\(x\), \(a\)]\) in expr. ";
-IntAsy[expr_List, x_] := IntAsy[#, x]& /@ expr
-IntAsy[0, x_] := 0
-IntAsy[expr_Plus, x_] := IntAsy[#, x]& /@ expr
-IntAsy[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntAsy[subexpr, x]
+IntAsy::usage = 
+"IntAsy[expr, x] evaluates the indefinite integral \[Integral]\[DifferentialD]x of \!\(\*SuperscriptBox[\(x\), \(a\)]\) in expr. ";
+IntAsy[expr_, x_] := IntAsyInternal[Expand[expr], x]
 
-IntAsy[x_^a_., x_] := 1/(a+1) x^(a+1)
-IntAsy[c_, x_]/;FreeQ[c, x] := c x
+IntAsyInternal[expr_List, x_] := IntAsyInternal[#, x]& /@ expr
+IntAsyInternal[0, x_] := 0
+IntAsyInternal[expr_Plus, x_] := IntAsyInternal[#, x]& /@ expr
+IntAsyInternal[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntAsyInternal[subexpr, x]
+
+IntAsyInternal[c_, x_]/;FreeQ[c, x] := c x
+IntAsyInternal[x_^a_., x_] := 1/(a+1) x^(a+1)
+(* NOTE: The default result of Integrate[x^a Log[c x]^n, x] -> 0 as x -> 0 with a > -1 *)
+IntAsyInternal[expr:(x_^a_. Log[c_. x_]^n_.)/;(IntegerQ[n]&&Positive[n]), x_] := Integrate[expr, x]
 
 
 DysonAsy::usage = 
-"DysonAsy[m, {x, order}, eps] calculates the Dyson series of the DEs near x = 0 with given \
-boundary conditions C[i]. m is assumed to be free of 1/x poles as x \[Rule] 0. ";
+"DysonAsy[m, {x, order}, eps] calculates the Dyson series of the DEs near x = 0 with arbitrary \
+boundary conditions specified by C[i]. m is assumed to be free of 1/x poles as x \[Rule] 0. ";
 DysonAsy::unknowint = "Some integrals cannot be calculated, e.g., ``. ";
 DysonAsy[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{
 		n = Dimensions[m][[1]],
@@ -505,15 +536,10 @@ DysonAsy[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{
 	},
 	With[{rs = FoldList[
 		ConfirmBy[
-			conv = Table[
-				IntAsy[
-					Expand[
-						Sum[mat[[o-i(*x^(o-i-1)*)]] . #1[[i-#2+2(*x^i*)]], {i, #2-1, Min[o-1, Length[#1]+#2-2]}]		
-					], 
-					x
-				],
-				{o, #2, order}
-			],
+			conv = Table[IntAsy[
+				Sum[mat[[o-i(*x^(o-i-1)*)]] . #1[[i-#2+2(*x^i*)]], {i, #2-1, Min[o-1, Length[#1]+#2-2]}], 
+				x
+				], {o, #2, order}],
 			FreeQ[#, IntAsy]&, Message[DysonAsy::unknowint, FirstCase[conv, _IntAsy, Null, {0, \[Infinity]}]]
 		]&,
 		{IdentityMatrix[n]},
@@ -526,6 +552,59 @@ DysonAsy[m_?MatrixQ, {x_, order_}, eps_] := Enclose[Module[{
 			],
 			{o, 0, order}
 		]
+	]
+], $Failed&]
+
+
+DysonAsyCanonical::usage = 
+"DysonAsyCanonical[m, {x, order}, eps] calculates the Dyson series of the canonical DEs near x = 0 with arbitrary \
+boundary conditions specified by C[i]. m is assumed to be of the \[Epsilon]-form with at most single poles at x = 0. 
+\"ForceJordan\" \[Rule] True | False
+	Whether to force the usage of JordanDecomposition[] (the default is False). 
+\"Collect\" \[Rule] True | False
+	Whether to collect the expression by x (default is True). 
+\"ShowProgress\" \[Rule] True | False
+	Whether to show progeress (default is False).  
+";
+DysonAsyCanonical::unsupp = "Unsupported form of matrix m. ";
+Options[DysonAsyCanonical] = {
+	"ForceJordan" -> False,
+	"ShowProgress" -> False,
+	"Collect" -> True
+};
+DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[Module[{
+		mat = Apart[m/eps, x],
+		mRes, U, jordan, sln0,
+		m1, T, time, rt
+	},
+	(* NOTE: Here Series[] is modified by Libra to always give SeriesData[] *)
+	ConfirmQuiet@If[Not@FreeQ[mat, eps] || AnyTrue[Normal@Series[mat, {x, 0, -2}], #=!=0&, 2], 
+		Message[DysonAsyCanonical::unsupp]
+	];
+	mRes = SeriesCoefficient[mat, {x, 0, -1}];
+	{U, jordan} = If[OptionValue["ForceJordan"] === True || Not@DiagonalizableMatrixQ[mRes],
+		JordanDecomposition[mRes],
+		(* Multiply by common denominators to get a simpler result *)
+		{Transpose[(LCM@@@Denominator[#2]) #2], DiagonalMatrix[#1]}& @@ Eigensystem[mRes]
+	];
+	sln0 = U . MatrixExp[Integrate[eps/x jordan, x]];
+	
+	m1 = Inverse[sln0] . (m . sln0 - \!\(
+\*SubscriptBox[\(\[PartialD]\), \(x\)]sln0\)) // Factor;
+	{time, T} = AbsoluteTiming[Confirm@DysonAsy[m1, {x, order}, eps]];
+	If[OptionValue["ShowProgress"] === True, Print@StringTemplate["DysonAsy[] finished in ``s. "][time]];
+	(*Return*)
+	rt = sln0 . # . Array[C, Dimensions[sln0][[2]]]& /@ T;
+	Which[
+	OptionValue["Collect"] === True && OptionValue["ShowProgress"] === True,
+		DynamicModule[{prog = {0, 0}},
+			PrintTemporary[Dynamic[StringTemplate["Collecting: order = `1`, i = `2`"][prog[[1]]-1, prog[[2]]]]];
+			rt = MapIndexed[(prog = #2; Collect[#1, {x^_}])&, rt, {2}]
+		]; rt,
+	OptionValue["Collect"] === True,
+		Map[Collect[#1, {x^_}]&, rt, {2}],
+	True,
+		rt
 	]
 ], $Failed&]
 

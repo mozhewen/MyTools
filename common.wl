@@ -140,8 +140,8 @@ j2Idx[expr_] :=
 
 NSeries0::usage = 
 "NSeries0[expr, eps, order] is a wrapper for Normal@Series[expr, {eps, 0, order}]. "
-NSeries0[expr_, eps_, order_] := Normal@Series[expr, {eps, 0, order}, Analytic -> False]
-NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, Assumptions -> assum, Analytic -> False]
+NSeries0[expr_, eps_, order_] := Normal@Series[expr, {eps, 0, order}]
+NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, Assumptions -> assum]
 
 
 DDCasesAll::usage =
