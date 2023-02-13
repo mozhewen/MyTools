@@ -5,7 +5,7 @@
 (**)
 (*Mathematica version: 13.1*)
 (**)
-(*Last update: 2022.12.7*)
+(*Last update: 2022.12.27*)
 
 
 ClearAll[EnumSP]
@@ -19,6 +19,7 @@ ClearAll[Idx2j, j2Idx]
 
 ClearAll[NSeries0]
 ClearAll[DDCasesAll]
+ClearAll[PSLQ]
 ClearAll[AddToAssoc, RemoveFromAssoc]
 
 ClearAll[LeadingAsymptotic0]
@@ -147,6 +148,16 @@ NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, As
 DDCasesAll::usage =
 "DDCasesAll[expr, pattern] is a wrapper for DeleteDuplicates@Cases[expr, pattern, {0, \[Infinity]}]"
 DDCasesAll[expr_, pattern_] := DeleteDuplicates@Cases[expr, pattern, {0, \[Infinity]}]
+
+
+PSLQ::usage = 
+"PSLQ[num, xList, bound] tries to express num as a linear combination of the numbers in xList. \
+bound is used to constrain the magnitude of the numerators and denominators of the coefficients. "
+PSLQ[num_Real, xList_List, bound_:10000] := Enclose[With[{
+		result = ConfirmQuiet@FindIntegerNullVector[Append[xList, num], Sqrt[Length[xList]+1] bound]
+	},
+	-(Most[result] / Last[result])
+], num&]
 
 
 SetAttributes[AddToAssoc, HoldFirst]
