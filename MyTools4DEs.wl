@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.2*)
 (**)
-(*Last update: 2022.12.29*)
+(*Last update: 2022.2.19*)
 (**)
 (*NOTE: *)
 (*	1. Series[] has been redefined in Libra. *)
@@ -66,6 +66,7 @@ ClearAll[GPL2HPL, StartPLT, CallPLT, KillPLT]
 ClearAll[Wrap, WrapLinearFraction]
 ClearAll[GPL, IntGPL, DysonGPL, DysonGPLWithAsy]
 ClearAll[WrapEpsPow, IntAsy, DysonAsy, DysonAsyCanonical]
+ClearAll[DotConvolve]
 
 Begin["`Private`"]
 
@@ -532,6 +533,7 @@ IntAsyInternal[c_ Shortest[subexpr_], x_]/;FreeQ[c, x] := c IntAsyInternal[subex
 IntAsyInternal[c_, x_]/;FreeQ[c, x] := c x
 IntAsyInternal[x_^a_., x_] := 1/(a+1) x^(a+1)
 (* NOTE: The default result of Integrate[x^a Log[c x]^n, x] -> 0 as x -> 0 with a > -1 *)
+IntAsyInternal[expr:(Log[c_. x_]^n_.)/;(IntegerQ[n]&&Positive[n]), x_] := Integrate[expr, x]
 IntAsyInternal[expr:(x_^a_. Log[c_. x_]^n_.)/;(IntegerQ[n]&&Positive[n]), x_] := Integrate[expr, x]
 
 
@@ -566,8 +568,10 @@ DysonAsy[m_?MatrixQ, {x_, order_}, eps_, initial_:All] := Enclose[Module[{
 
 
 DysonAsyCanonical::usage = 
-"DysonAsyCanonical[m, {x, order}, eps] calculates the Dyson series of the canonical DEs near x = 0 with arbitrary \
-initial conditions specified by C[i]. m is assumed to be of the \[Epsilon]-form with at most single poles at x = 0. 
+"DysonAsyCanonical[m, {x, order}, eps] calculates the Dyson series of the DEs near x = 0 with arbitrary \
+initial conditions specified by C[i]. m is assumed to be of at most single poles at x = 0 and has \
+integral-power expansion of x. NOTE: It terms out that this approach is only applicable to the canonical \
+forms (proportional to eps). 
 \"Collect\" \[Rule] True | False
 	Whether to collect the expression by x (default is True). 
 \"ForceJordan\" \[Rule] True | False
@@ -585,16 +589,17 @@ Options[DysonAsyCanonical] = {
 	"ShowProgress" -> False
 };
 DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[Module[{
-		mat = Apart[m/eps, x],
+		mSimp = Apart[Simplify[m], x],
 		mRes, U, jordan, sln0, initial,
 		m1, T, time, rt
 	},
 	(* NOTE: Here Series[] is modified by Libra to always give SeriesData[] *)
-	ConfirmQuiet@If[Not@FreeQ[mat, eps] || AnyTrue[Normal@Series[mat, {x, 0, -2}], #=!=0&, 2], 
+	ConfirmQuiet@If[AnyTrue[Normal@Series[mSimp, {x, 0, -2}], #=!=0&, 2], 
 		Message[DysonAsyCanonical::unsupp]
 	];
-	mRes = Simplify@SeriesCoefficient[mat, {x, 0, -1}];
+	mRes = SeriesCoefficient[mSimp, {x, 0, -1}];
 
+	(* U^-1 M U = j *)
 	{U, jordan} = If[OptionValue["ForceJordan"] === True || Not@DiagonalizableMatrixQ[mRes],
 		Print["Use JordanDecomposition[]"];
 		JordanDecomposition[mRes]
@@ -603,7 +608,7 @@ DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[M
 		(* Multiply by common denominators to get a simpler result *)
 		{Transpose[(LCM@@@Denominator[#2]) #2], DiagonalMatrix[#1]}& @@ Eigensystem[mRes]
 	];
-	sln0 = U . MatrixExp[Integrate[eps/x jordan, x]];
+	sln0 = U . Echo[MatrixExp[Integrate[1/x jordan, x]], "\[Integral]jordan", TraditionalForm];
 	initial = If[OptionValue["Initial"] === All,
 		All,
 		{DiagonalMatrix[
@@ -611,8 +616,9 @@ DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[M
 		]}
 	];
 
-	m1 = Inverse[sln0] . (m . sln0 - \!\(
+	m1 = Inverse[sln0] . (mSimp . sln0 - \!\(
 \*SubscriptBox[\(\[PartialD]\), \(x\)]sln0\)) // Factor;
+	Echo[m1, "m1", TraditionalForm];
 	{time, T} = AbsoluteTiming[Confirm@DysonAsy[m1, {x, order}, eps, initial]];
 	If[OptionValue["ShowProgress"] === True, Print@StringTemplate["DysonAsy[] finished in ``s. "][time]];
 
@@ -630,6 +636,20 @@ DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[M
 		rt
 	]
 ], $Failed&]
+
+
+DotConvolve::usage =
+"DotConvolve[m1, m2, order] calculates {\!\(\*SubscriptBox[\(\[Sum]\), \(i\)]\)m1\[LeftDoubleBracket]i+1\[RightDoubleBracket].m2\[LeftDoubleBracket]j-i+1\[RightDoubleBracket] | j=0, \[Ellipsis], order}. 
+DotConvolve[m1, m2, orderList] calculates {\!\(\*SubscriptBox[\(\[Sum]\), \(i\)]\)m1\[LeftDoubleBracket]i+1\[RightDoubleBracket].m2\[LeftDoubleBracket]j-i+1\[RightDoubleBracket] | j \[Element] orderList}. 
+";
+DotConvolve[m1_List, m2_List, orderList_List] := 
+	With[{l1 = Length[m1], l2 = Length[m2]},
+		Table[
+			Sum[m1[[i+1]] . m2[[j-i+1]], {i, Max[0, j-l2+1], Min[j, l1-1]}],
+			{j, orderList}
+		]
+	]
+DotConvolve[m1_List, m2_List, order_Integer] := DotConvolve[m1, m2, Range[0, order]]
 
 
 (* ::Section:: *)

@@ -3,9 +3,9 @@
 (* ::Text:: *)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.1*)
+(*Mathematica version: 13.2*)
 (**)
-(*Last update: 2022.12.27*)
+(*Last update: 2023.2.19*)
 
 
 ClearAll[EnumSP]
@@ -22,6 +22,8 @@ ClearAll[DDCasesAll]
 ClearAll[PSLQ]
 ClearAll[AddToAssoc, RemoveFromAssoc]
 
+ClearAll[LeadingPower, LeadingOrderMT]
+ClearAll[ResumLog, \[ScriptCapitalC]]
 ClearAll[LeadingAsymptotic0]
 
 ClearAll[MapAllStruct]
@@ -176,6 +178,47 @@ RemoveFromAssoc[assoc_, keys__] := (assoc = Delete[assoc, {Key[#]}&/@{keys}])
 
 (* ::Section:: *)
 (*Asymptotics*)
+
+
+LeadingPower[expr_List, x_, x0_] := LeadingPower[#, x, x0]& /@ expr
+
+LeadingPower[expr_, x_, x0_]:=With[{ser = Series[expr, x -> x0]},
+	Switch[ser, _SeriesData, ser[[-3]], _, 0]
+]
+
+
+LeadingOrderMT[expr_List, x_, x0_] := LeadingOrderMT[#, x, x0]& /@ expr
+
+LeadingOrderMT[expr_, x_, x0_]:=With[{ser = Series[expr, x -> x0]},
+	Switch[ser, _SeriesData, Normal[ser], _, 0]
+]
+
+
+ResumLog::usage="ResumLog[expand, {\!\(\*SubscriptBox[\(f\), \(1\)]\), \!\(\*SubscriptBox[\(f\), \(2\)]\),...}, x, {\[Epsilon], order0, order}] matches the expansion \"expand\" \
+with the expression
+\!\(\*UnderscriptBox[\(\[Sum]\), \(i\)]\) \!\(\*SubscriptBox[\(f\), \(i\)]\)(x, \[Epsilon]) (\[ScriptCapitalC][i,order0]\!\(\*SuperscriptBox[\(\[Epsilon]\), \(order0\)]\) + \[Ellipsis] + \[ScriptCapitalC][i,j]\!\(\*SuperscriptBox[\(\[Epsilon]\), \(j\)]\) + \[Ellipsis] )
+up to \!\(\*SuperscriptBox[\(\[Epsilon]\), \(order\)]\) in the whole expression. ";
+\[ScriptCapitalC]::usage = "The indeterminate constant returned by ResumLog[]. ";
+ResumLog::mismatch = "The given functional form cannot match the expression. ";
+ResumLog[expand_, form_List, x_, {eps_, order0_, order_}] := Enclose[Module[{
+		expr, CList,
+		xOrder0,epsOrder0,
+		eqs,eqsCoef
+	},
+	expr = Table[
+		form[[i]]Sum[\[ScriptCapitalC][i, j] eps^j, {j, order0, order - LeadingPower[form[[i]], eps, 0]}],
+		{i, Length[form]}
+	];
+	CList = DeleteDuplicates@Cases[expr, _\[ScriptCapitalC], {0, \[Infinity]}];
+	eqs = Normal@Series[Total[expr]-expand, {eps, 0, order}];
+	xOrder0 = LeadingPower[eqs, x, 0];
+	epsOrder0 = LeadingPower[eqs, eps, 0];
+	eqsCoef = CoefficientList[x^-xOrder0 eps^-epsOrder0 eqs, {x, Log[x], eps}];
+	expr /. First[ConfirmBy[
+		Solve[eqsCoef==0, CList],
+		#=!={}&, Message[ResumLog::mismatch]
+	]]
+], $Failed&]
 
 
 ClearAll[LeadingAsymptotic0Internal]
