@@ -572,8 +572,8 @@ DysonAsyCanonical::usage =
 initial conditions specified by C[i]. m is assumed to be of at most single poles at x = 0 and has \
 integral-power expansion of x. NOTE: It terms out that this approach is only applicable to the canonical \
 forms (proportional to eps). 
-\"Collect\" \[Rule] True | False
-	Whether to collect the expression by x (default is True). 
+\"SimplifyFunction\" \[Rule] Identity | f
+	Function used to simplify the expression (default is Identity). 
 \"ForceJordan\" \[Rule] True | False
 	Whether to force the usage of JordanDecomposition[] (the default is False). 
 \"Initial\" -> All | pattern
@@ -583,7 +583,7 @@ forms (proportional to eps).
 ";
 DysonAsyCanonical::unsupp = "Unsupported form of matrix m. ";
 Options[DysonAsyCanonical] = {
-	"Collect" -> True,
+	"SimplifyFunction" -> Identity,
 	"ForceJordan" -> False,
 	"Initial" -> All,
 	"ShowProgress" -> False
@@ -624,16 +624,13 @@ DysonAsyCanonical[m_?MatrixQ, {x_, order_}, eps_, OptionsPattern[]] := Enclose[M
 
 	(*Return*)
 	rt = sln0 . # . Array[C, Dimensions[sln0][[2]]]& /@ T;
-	Which[
-	OptionValue["Collect"] === True && OptionValue["ShowProgress"] === True,
+	If[OptionValue["ShowProgress"] === True,
 		DynamicModule[{prog = {0, 0}},
-			PrintTemporary[Dynamic[StringTemplate["Collecting: order = `1`, i = `2`"][prog[[1]]-1, prog[[2]]]]];
-			rt = MapIndexed[(prog = #2; Collect[#1, {x^_}])&, rt, {2}]
+			PrintTemporary[Dynamic[StringTemplate["Calling SimplifyFunction: order = `1`, i = `2`"][prog[[1]]-1, prog[[2]]]]];
+			rt = MapIndexed[(prog = #2; OptionValue["SimplifyFunction"][#1])&, rt, {2}]
 		]; rt,
-	OptionValue["Collect"] === True,
-		Map[Collect[#1, {x^_}]&, rt, {2}],
-	True,
-		rt
+	(*Else*)
+		Map[OptionValue["SimplifyFunction"], rt, {2}]
 	]
 ], $Failed&]
 
