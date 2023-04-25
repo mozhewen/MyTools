@@ -73,6 +73,7 @@ ClearAll[GuessTrans]
 ClearAll[AP]
 ClearAll[CompleteBasis]
 ClearAll[ExpressByBasis, ExpressByBasisParallel]
+ClearAll[ReExpressNumerators]
 
 ClearAll[GenFIREFiles]
 ClearAll[GetFIRETables]
@@ -783,6 +784,15 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 		];
 		(*Return*)result
 	]
+
+
+ReExpressNumerators::usage =
+"ReExpressNumerators[sint, basis, lList] re-expresses the numerators in sint as linear \
+combinations of the basis. NOTE: Not optimal in speed. ";
+ReExpressNumerators[sint_SInt, basis_List, lList_List] := Idx2SInt[
+	ExpressByBasis[sint, basis, lList, "ShowProgress" -> False][[1]],
+	basis
+]
 
 
 (* ::Subsection::Closed:: *)
