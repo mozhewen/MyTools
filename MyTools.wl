@@ -6,9 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.1*)
+(*Mathematica version: 13.2*)
 (**)
-(*Last update: 2022.12.7*)
+(*Last update: 2023.4.26*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -73,7 +73,7 @@ ClearAll[GuessTrans]
 ClearAll[AP]
 ClearAll[CompleteBasis]
 ClearAll[ExpressByBasis, ExpressByBasisParallel]
-ClearAll[ReExpressNumerators]
+ClearAll[ReExpressNumerators, ReExpressNumeratorsFool]
 
 ClearAll[GenFIREFiles]
 ClearAll[GetFIRETables]
@@ -792,7 +792,15 @@ combinations of the basis. NOTE: Not optimal in speed. ";
 ReExpressNumerators[sint_SInt, basis_List, lList_List] := Idx2SInt[
 	ExpressByBasis[sint, basis, lList, "ShowProgress" -> False][[1]],
 	basis
-]
+] 
+
+ReExpressNumeratorsFool::usage =
+"ReExpressNumeratorsFool[sintList, lList, extList], lList: loop momenta, extList: external momenta. "
+ReExpressNumeratorsFool[sintList_List, lList_List, extList_List] := 
+	ReExpressNumerators[#,
+		CompleteBasis[Cases[#, {denom_, i_/;i>0}][[;;,1]], lList, extList],
+		lList
+	]& /@ sintList
 
 
 (* ::Subsection::Closed:: *)
