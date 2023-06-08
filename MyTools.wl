@@ -376,7 +376,7 @@ FP[sint_SInt, l_, d_, assum_:{}] :=
 					},
 					If[Not@IntegerQ[m],
 						(* 0 *)Nothing,
-						(2\[Pi])^d (((-1)^(m-a) I)/(4\[Pi])^(d/2) Gamma[a-m-d/2](1/\[CapitalDelta])^(a-m-d/2)) 1/2^m MakeSymPair[lis] EchoLabel["cc"]@Times[cc] A^-a //Contract
+						prefac (2\[Pi])^d (((-1)^(m-a) I)/(4\[Pi])^(d/2) Gamma[a-m-d/2](1/\[CapitalDelta])^(a-m-d/2)) 1/2^m MakeSymPair[lis] EchoLabel["cc"]@Times[cc] A^-a //Contract
 					]
 				]
 			}]&,
@@ -549,7 +549,7 @@ GuessTrans[src_List, dest_List, lList_List] :=
 			sln4d = Solve[coef[[2]] == 0 /. onesln4c, Array[d, n]];
 			(* coef\[LeftDoubleBracket]1\[RightDoubleBracket] is deemed to be zeros if src and dest match. *)
 			If[sln4d =!= {},
-				rs = Expand[rule/.onesln4c/.First@sln4d];
+				rs = Expand[rule/.onesln4c/.First@sln4d/.{_d -> 0 (* If solution not unique *)}];
 				If[Abs@Det[Array[c, {n, n}]/.onesln4c] =!= 1, 
 					Message[GuessTrans::notone, rs]; Return[]
 				];
