@@ -6,9 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.2*)
+(*Mathematica version: 13.3.1*)
 (**)
-(*Last update: 2023.4.26*)
+(*Last update: 2023.9.17*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -34,7 +34,7 @@ If[!ValueQ[Global`$KiraExecutable],
 
 
 If[!ValueQ[Global`$FermatExecutable],
-	MyTools`$FermatExecutable = "/home/mozhewen/Documents/ferl6/fer64",
+	MyTools`$FermatExecutable = "/home/mozhewen/Packages/ferl6/fer64",
 	MyTools`$FermatExecutable = Global`$FermatExecutable;
 	Remove[Global`$FermatExecutable]
 ]
@@ -52,6 +52,7 @@ ClearAll[MakeSymPair]
 
 ClearAll[FC2Plain, Plain2FC]
 ClearAll[SInt]
+ClearAll[TallyTally]
 ClearAll[FC2SInt]
 ClearAll[Idx2SInt]
 ClearAll[SInt2Explicit]
@@ -220,7 +221,13 @@ Plain2FC[expr_, kList_List] :=
 SInt::usage =
 "SInt[{qf1, a1}, {qf2, a2}, ...] represents the scalar integral \
 \[Integral]\!\(\*FractionBox[\(1\), \(\*SuperscriptBox[\(qf1\), \(a1\)] \*SuperscriptBox[\(qf2\), \(a2\)] ... \)]\)\[DifferentialD]l1.... ";
-SInt[] = 1;  (* Trivial integral *)
+
+
+TallyTally::usage =
+"TallyTally[{{a, i}, {a, j}, {b, k}, {b, l}, ...}] gives {{a, i+j}, {b, k+l}, ...}. "
+TallyTally[list_List] := (MapThread[Construct, {{First, Total}, 
+		Transpose[#]
+	}]//Replace[{_, 0} -> Nothing])&/@GatherBy[list, First]
 
 
 FC2SInt::usage =
@@ -235,8 +242,8 @@ Options[FC2SInt] = {
 FC2SInt[expr_, lList_List, OptionsPattern[]] := FeynAmpDenominatorCombine[expr] /.
 	c_. Shortest[numer_.] denom_FeynAmpDenominator /; FreeQ[c, Alternatives@@lList] :>
 		c (Times@@Cases[#, {x_?(FreeQ[#, Alternatives@@lList]&), a_} :> ExpandScalarProduct[x^-a]] 
-		SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
-			MapAt[Minus, FactorList[numer], {All, 2}] ~Join~ Tally@Cases[denom, x_PropagatorDenominator :> PropExplicit[x]]
+		SInt@@If[OptionValue["KeepOrder"] === True, Identity, SortBy[#, First]&]@TallyTally@Cases[#, {x_?(Not@FreeQ[#, Alternatives@@lList]&), a_}]&)[
+			Tally@Cases[denom, x_PropagatorDenominator :> PropExplicit[x]] ~Join~ MapAt[Minus, FactorList[numer], {All, 2}]
 		]
 
 
@@ -907,7 +914,7 @@ GetFIRETables[problemName_String, OptionsPattern[]] :=
 	]	
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*Kira interface*)
 
 
