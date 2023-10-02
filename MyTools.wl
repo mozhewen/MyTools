@@ -6,9 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.3.1*)
+(*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.9.17*)
+(*Last update: 2023.9.29*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -689,7 +689,8 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 				denom = sint[[denomPos]];
 				Catch@Do[
 					rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basisI[[can]])), lList, SectorOnly -> True];
-					rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];
+					(* Counterexample: {l1^2, (l1-k1)^2, (l1+k2)^2} with massless k1, k2 *)
+					(*rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];*)
 					Do[
 						(* Deal with the denominator *)
 						idx = Table[0, Length[basisI]];
@@ -995,8 +996,10 @@ GenKiraFiles[topoName_String, basis_List, idxList_List, int_List, ext_List, Opti
 		DeletePath[FileNameJoin[{OutDir, topoName, "tmp"}]];
 		DeletePath[FileNameJoin[{OutDir, topoName, "kira.log"}]];
 		DeletePath[FileNameJoin[{OutDir, topoName, "preferred"}]];
+		DeletePath[FileNameJoin[{OutDir, topoName, "config"}]];
 
 		(* 2. Export configuration information *)
+		CreateDirectory[FileNameJoin[{OutDir, topoName, "config"}]];
 		FileTemplateApply[familyTemp, 
 			<|
 				"name" -> topoName,
