@@ -5,7 +5,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.10.4*)
+(*Last update: 2023.10.10*)
 
 
 (* Kinematics *)
@@ -16,7 +16,7 @@ ClearAll[\[CapitalOmega]]
 
 (* Scalar integral representations *)
 j;
-ClearAll[II]
+II;
 ClearAll[II2j, j2II]
 
 (* Wrappers *)
@@ -135,12 +135,13 @@ ToSqForm[quad_, l_, SPrules_List:{}, OptionsPattern[]] :=
 \[CapitalOmega][d_] := (2 \[Pi]^(d/2)) / Gamma[d/2]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Scalar integral representations*)
 
 
-II::usage =
-"II[a1, a2, ...] represents the indices of propagators in a specific basis. "
+II::usage = 
+	If[ValueQ[II::usage, Method->"TrialEvaluation"], II::usage <> "\n", ""] \
+	<> "II[a1, a2, ...] represents the indices of propagators in a specific basis. "
 
 
 II2j::usage =
