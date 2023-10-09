@@ -4,12 +4,14 @@ Utility functions for calculating loop integrals
 
 ## Usage
 
-The main package `MyTools.wl` is based on 
+The main package `MyTools.wl` is based on
 
- * FeynCalc (https://github.com/FeynCalc/feyncalc), 
- * FIRE (https://bitbucket.org/feynmanIntegrals/fire/src/master/). 
+ * IExpr (https://github.com/mozhewen/IExpr), 
+ * FIRE (https://bitbucket.org/feynmanIntegrals/fire/src/master/) or
 
-The tools for differential equations `MyTools4DEs.wl` requires FIRE and
+   Kira (https://gitlab.com/kira-pyred/kira). 
+
+The tools for differential equations `MyTools4DEs.wl` requires FIRE/Kira and
 
 * LiteRed (https://www.inp.nsk.su/~lee/programs/LiteRed/), 
 * Libra (https://rnlee.bitbucket.io/Libra/), 
@@ -22,19 +24,15 @@ Please install these dependencies before using the corresponding packages.
 
 To use MyTools in Mathematica, simply type 
 ```Mathematica
+(* OPTIONAL *)
 $FIREHome = "/path/to/fire/FIRE6";
+$KiraExecutable = "/path/to/kira";
+$FermatExecutable = "/path/to/ferl6/fer64";
+$IExprHome = "/path/to/IExpr";
+
 Get["/path/to/MyTools/MyTools.wl"]
 ```
-at the beginning of your notebook file. To load it in parallel kernels, you should load FeynCalc in
-parallel explicitly before getting `MyTools.wl`: 
-
-```Mathematica
-ParallelNeeds["FeynCalc`"]
-ParallelEvaluate[
-	$FIREHome = "/path/to/fire/FIRE6";
-	Get["/path/to/MyTools/MyTools.wl"]
-]
-```
+at the beginning of your notebook file. 
 
 ## File Description
 

@@ -6,9 +6,9 @@
 (**)
 (*Author: Zhewen Mo (mozhewen@outlook.com, mozw@ihep.ac.cn)*)
 (**)
-(*Mathematica version: 13.0*)
+(*Mathematica version: 13.3*)
 (**)
-(*Last update: 2022.3.25*)
+(*Last update: 2023.10.9*)
 
 
 (* ::Section:: *)
@@ -19,10 +19,12 @@ BeginPackage["MyTools4AMF`"];
 
 Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]];
 
+
 ClearAll[LinearReduce]
 ClearAll[LinearIndepQ]
 
 ClearAll[CompleteBasis]
+
 
 Begin["`Private`"]
 
@@ -88,7 +90,9 @@ LinearIndepQ[basis_List, int_List, ext_List] :=
 
 
 CompleteBasis::usage =
-"CompleteBasis[basis, int, ext] completes basis with respect to the specific auxiliary basis aux1, aux2, ... ";
+"CompleteBasis[basis, int, ext, \"AuxiliaryBasis\" \[Rule] {aux1, aux2, ...}] completes basis with respect to \
+the specific auxiliary basis aux1, aux2, ... "
+
 Options[CompleteBasis] = {
 	"AuxiliaryBasis" -> None
 }
