@@ -56,7 +56,6 @@ ClearAll[Coef012]
 ClearAll[PropExplicit]
 ClearAll[LinearIndepQ]
 ClearAll[LinearReduce]
-ClearAll[MakeSymPair]
 ClearAll[GatherTally]
 
 (* Change representation *)
@@ -205,22 +204,6 @@ LinearReduce[expr_, basis_List, lList_List] :=
 	]
 
 
-MakeSymPair::usage =
-"MakeSymPair[idxList] only uses the metric tensor to form a totally symmetric tensor for \
-indices from idxList. 
-MakeSymPair[idxList, \"List\"] gives the list of terms. "
-
-MakeSymPair[{}] := 1
-MakeSymPair[idxList_List] := With[{f = First[idxList], r = Rest[idxList]},
-	Sum[\[Delta][f, r[[i]]]MakeSymPair[Delete[r, i]], {i, Length[r]}]
-]
-
-MakeSymPair[{}, "List"] := {1}
-MakeSymPair[idxList_List, "List"] := With[{f = First[idxList], r = Rest[idxList]},
-	Catenate@Table[\[Delta][f, r[[i]]]MakeSymPair[Delete[r, i], "List"], {i, Length[r]}]
-]
-
-
 GatherTally::usage =
 "GatherTally[{{form1, a1}, {form1, a2}, {form2, a3}, ...}] gives {{form1, a1+a2}, {form2, a3}} for example. 
 GatherTally[{...}, f] uses f[formi] to identify the equivalence of formi. "
@@ -279,7 +262,7 @@ IExpr2Int::usage =
 representation. "
 
 IExpr2Int[list_List, lList_List] := IExpr2Int[#, lList]& /@ list
-IExpr2Int[expr_, lList_List] := Enclose[Total[Replace[
+IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
 	c_. Shortest[facs_.] /; FreeQ[c, Alternatives@@lList] :> (
 		(
 			ConfirmAssert[#5 === {}];
@@ -294,8 +277,10 @@ IExpr2Int[expr_, lList_List] := Enclose[Total[Replace[
 			{1, 1} -> 1,
 			rest_ :> rest
 		]
-	)
-] /@ NCMonomialList[VecExpand[expr], Alternatives@@lList]] ]
+	),
+	NCMonomialList[VecExpand[expr], Alternatives@@lList],
+	{1}
+]
 
 
 II2SInt::usage =
@@ -325,7 +310,7 @@ RS[sint_SInt, assum_:{}] := {
 }
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Typesetting*)
 
 
@@ -426,13 +411,15 @@ TID[TInt[{props__}, tens_], lList_List, d_] :=
 		];
 		numer = Expand@VecExpand[ContractIdx[tens] /. rules4l];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
-		numer = EchoLabel["numer after"]@GatherTally[Replace[
+		numer = EchoLabel["numer after"]@GatherTally@Replace[
 			(coef_ |
 			 (l1:\[Delta][Vec[lPatt], Idx[Lor, _]]) |
 			 HoldPattern@Times[ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..] |
 			 (coef_ (ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..))
-			) /; FreeQ[Times[coef], \[Delta][Vec[lPatt], Idx[Lor, _]]] :> {Times[l1, ls], Times[coef]}
-		] /@ numer];
+			) /; FreeQ[Times[coef], \[Delta][Vec[lPatt], Idx[Lor, _]]] :> {Times[l1, ls], Times[coef]},
+			numer,
+			{1}
+		];
 		
 		(* NOTE: 
 			1. ls should not have powers of indexed l, since it should have been contracted and moved
@@ -444,7 +431,7 @@ TID[TInt[{props__}, tens_], lList_List, d_] :=
 				(* 0 *)Nothing,
 				With[{coef = EchoLabel["coef"]@Simplify@#2,
 					  lis = ls /. \[Delta][Vec[lPatt], \[Mu]:Idx[Lor, _]] :> \[Mu]},
-					\[Eta]s = MakeSymPair[lis, "List"];
+					\[Eta]s = MakeMetricProduct[lis, "List"];
 					IExpr2Int[
 						Times[
 							(* These are always d-dimensional *)
@@ -510,13 +497,15 @@ FP[SInt[props__] | TInt[{props__}, tens_], l_, d_, assum_:{}] :=
 
 		numer = RenumberIndices@Expand@UncontractIdx[VecExpand[numer /. Vec[l] :> Vec[l] - b/(2 A)], SP[l, _]];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
-		numer = EchoLabel["numer after"]@GatherTally[Replace[
+		numer = EchoLabel["numer after"]@GatherTally@Replace[
 			(coef_ |
 			(l1:\[Delta][Vec[l], Idx[Lor, _]]) |
 			 HoldPattern@Times[ls:\[Delta][Vec[l], Idx[Lor, _]]^_. ..] |
 			 (coef_ (ls:\[Delta][Vec[l], Idx[Lor, _]]^_. ..))
-			) /; FreeQ[Times[coef], l] :> {Times[l1, ls], Times[coef]}
-		] /@ numer];
+			) /; FreeQ[Times[coef], l] :> {Times[l1, ls], Times[coef]},
+			numer,
+			{1}
+		];
 
 		With[{ls = Catenate[Table[#1, #2]& @@@ Rest@FactorList[#1]],
 			  coef = EchoLabel["coef"]@#2},
@@ -526,7 +515,7 @@ FP[SInt[props__] | TInt[{props__}, tens_], l_, d_, assum_:{}] :=
 					(* 0 *)Nothing,
 					Times[
 						prefac (2\[Pi])^d (((-1)^(m-a) I)/(4\[Pi])^(d/2) Gamma[a-m-d/2](1/\[CapitalDelta])^(a-m-d/2)) 1/2^m,
-						MakeSymPair[lis] coef A^-a // ContractIdx
+						MakeMetricProduct[lis, "Sym"] coef A^-a // ContractIdx
 					]
 				]
 			]
@@ -1177,7 +1166,7 @@ GenKiraFiles[topoName_String, basis_List, iiList_List, int_List, ext_List, Optio
 			<|
 				"kList" -> EncodeIntoYAML[ext, "Type" -> "Inline"],
 				"inv" -> EncodeIntoYAML[Join[
-						{inv, Replace[VarDims]/@inv}\[Transpose],
+						{inv, Replace[VarDims, inv, {1}]}\[Transpose],
 						{StringTemplate["b``"][#-1], 0}& /@ SymbolicIBP
 					],
 					 4, "Type" -> "Block"
