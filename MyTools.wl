@@ -8,11 +8,11 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.10.8*)
+(*Last update: 2023.10.23*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
-(*	2. Check FP[]. *)
+(*	2. Check FP[] & TID[]. *)
 
 
 (* ::Section:: *)
@@ -43,10 +43,10 @@ If[!ValueQ[Global`$FermatExecutable],
 If[!ValueQ[Global`$IExprHome],
 	Global`$IExprHome = "/home/mozhewen/Packages/IExpr/"
 ]
-Get[FileNameJoin[{Global`$IExprHome, "Minkowski.wl"}]]
+Needs["IExpr`Feynman`", FileNameJoin[{Global`$IExprHome, "Feynman.wl"}]]
 
 
-BeginPackage["MyTools`", {"Minkowski`", "Tensor`"}]
+BeginPackage["MyTools`", {"IExpr`Feynman`", "IExpr`Minkowski`", "IExpr`NonAbelian`", "IExpr`SimpleContract`", "IExpr`Tensor`", "IExpr`Utils`"}]
 
 Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]]
 
@@ -263,6 +263,7 @@ representation. "
 
 IExpr2Int[list_List, lList_List] := IExpr2Int[#, lList]& /@ list
 IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
+	NCMonomialList[VecExpand[expr], Alternatives@@lList],
 	c_. Shortest[facs_.] /; FreeQ[c, Alternatives@@lList] :> (
 		(
 			ConfirmAssert[#5 === {}];
@@ -278,7 +279,6 @@ IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
 			rest_ :> rest
 		]
 	),
-	NCMonomialList[VecExpand[expr], Alternatives@@lList],
 	{1}
 ]
 
@@ -296,7 +296,7 @@ SInt2Explicit::usage =
 SInt2Explicit[expr_] := expr /. SInt[props__] :> Times@@Cases[{props}, {x_, a_} :> x^-a]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Statistics*)
 
 
@@ -341,7 +341,7 @@ DisplayInt[expr_, lList_List, OptionsPattern[]] :=
 		DisplayForm[
 			RowBox[{"\[Integral]", FractionBox[
 				RowBox[Join[
-					Riffle[lList, SuperscriptBox["\[DifferentialD]", OptionValue["d"]], {1, -2, 2}],
+					Riffle[Vec/@lList, SuperscriptBox["\[DifferentialD]", OptionValue["d"]], {1, -2, 2}],
 					Replace[SinglePropBox@@@numer, {ent__}:>{Style["\[Times]", Gray], ent}]
 				]],
 				RowBox[SinglePropBox@@@denom]
@@ -412,12 +412,12 @@ TID[TInt[{props__}, tens_], lList_List, d_] :=
 		numer = Expand@VecExpand[ContractIdx[tens] /. rules4l];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
 		numer = EchoLabel["numer after"]@GatherTally@Replace[
+			numer,
 			(coef_ |
 			 (l1:\[Delta][Vec[lPatt], Idx[Lor, _]]) |
 			 HoldPattern@Times[ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..] |
 			 (coef_ (ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..))
 			) /; FreeQ[Times[coef], \[Delta][Vec[lPatt], Idx[Lor, _]]] :> {Times[l1, ls], Times[coef]},
-			numer,
 			{1}
 		];
 		
@@ -498,12 +498,12 @@ FP[SInt[props__] | TInt[{props__}, tens_], l_, d_, assum_:{}] :=
 		numer = RenumberIndices@Expand@UncontractIdx[VecExpand[numer /. Vec[l] :> Vec[l] - b/(2 A)], SP[l, _]];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
 		numer = EchoLabel["numer after"]@GatherTally@Replace[
+			numer,
 			(coef_ |
 			(l1:\[Delta][Vec[l], Idx[Lor, _]]) |
 			 HoldPattern@Times[ls:\[Delta][Vec[l], Idx[Lor, _]]^_. ..] |
 			 (coef_ (ls:\[Delta][Vec[l], Idx[Lor, _]]^_. ..))
 			) /; FreeQ[Times[coef], l] :> {Times[l1, ls], Times[coef]},
-			numer,
 			{1}
 		];
 
