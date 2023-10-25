@@ -224,7 +224,7 @@ GatherTally[list_List, f_:Identity] :=
 IExpr2Plain::usage =
 "IExpr2Plain[expr] converts the quadratic form expr in IExpr's \[Delta][] form into the plain Times[] form. "
 
-IExpr2Plain[expr_] := VecExpand@ContractIdx[expr] /. \[Delta][Vec[a_], Vec[b_]] :> a b
+IExpr2Plain[expr_] := ContractIdx[expr] /. \[Delta][a_?VecQ, b_?VecQ] :> (a b /. Vec[v_] :> v)
 
 
 Plain2IExpr::usage =
@@ -267,7 +267,7 @@ IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
 	c_. Shortest[facs_.] /; FreeQ[c, Alternatives@@lList] :> (
 		(
 			ConfirmAssert[#5 === {}];
-			c TInt[
+			(c /. Denom[denom_] :> 1/Simplify@VecExpand@ContractIdx[denom]) TInt[
 				GatherTally[Join[#1, #2], Expand@*VecExpand@*ContractIdx],
 				Times@@#3
 			]
@@ -391,10 +391,16 @@ Baikov[int_List, ext_List, d_, OptionsPattern[]] :=
 	]]
 
 
-TID[TInt[{props__}, tens_], lList_List, d_] :=
+TID::usage =
+"TID[tint, lList, d] performs Tensor Integral Decomposition for tensor integral 'tint' in 'd' dimensions \
+with loop momenta given by 'lList'. 
+TID[tintList, lList, d] runs TID[] for a list of tensor integrals. "
+
+TID[tintList_List, lList_List, d_] := TID[#, lList, d]& /@ tintList
+TID[TInt[props_List, tens_], lList_List, d_] :=
 	Module[{iG, rules4l, numer, \[Eta]s}, 
 	With[{
-		extList = Complement[
+		extList = Echo@Complement[
 			DDCasesAll[Expand@VecExpand@ContractIdx@props, Vec[p_] :> p],
 			lList
 		],
@@ -435,7 +441,7 @@ TID[TInt[{props__}, tens_], lList_List, d_] :=
 					IExpr2Int[
 						Times[
 							(* These are always d-dimensional *)
-							coef Times@@(Denom[#1]^#2& @@@ {props}),
+							coef Times@@(Denom[#1]^#2& @@@ props),
 							(* Should be re-expressed by the d-dimensional ones *)
 							EchoLabel["sln"]@LinearSolve[
 								(*m=*)Outer[ContractIdx[#1 #2]&, \[Eta]s, \[Eta]s],
@@ -1166,7 +1172,7 @@ GenKiraFiles[topoName_String, basis_List, iiList_List, int_List, ext_List, Optio
 			<|
 				"kList" -> EncodeIntoYAML[ext, "Type" -> "Inline"],
 				"inv" -> EncodeIntoYAML[Join[
-						{inv, Replace[VarDims, inv, {1}]}\[Transpose],
+						{inv, Replace[inv, VarDims, {1}]}\[Transpose],
 						{StringTemplate["b``"][#-1], 0}& /@ SymbolicIBP
 					],
 					 4, "Type" -> "Block"
