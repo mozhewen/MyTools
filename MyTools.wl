@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.10.23*)
+(*Last update: 2023.11.3*)
 (**)
 (*TODO:*)
 (*	1. Check the function of ZeroSIntQ[]. *)
@@ -20,7 +20,7 @@
 
 
 If[!ValueQ[Global`$FIREHome],
-	MyTools`$FIREHome = "/home/mozhewen/Packages/fire/FIRE6/",
+	MyTools`$FIREHome = $HomeDirectory <> "/Packages/fire/FIRE6/",
 	MyTools`$FIREHome = Global`$FIREHome;
 	Remove[Global`$FIREHome]
 ]
@@ -34,14 +34,14 @@ If[!ValueQ[Global`$KiraExecutable],
 
 
 If[!ValueQ[Global`$FermatExecutable],
-	MyTools`$FermatExecutable = "/home/mozhewen/Packages/ferl6/fer64",
+	MyTools`$FermatExecutable = $HomeDirectory <> "/Packages/ferl6/fer64",
 	MyTools`$FermatExecutable = Global`$FermatExecutable;
 	Remove[Global`$FermatExecutable]
 ]
 
 
 If[!ValueQ[Global`$IExprHome],
-	Global`$IExprHome = "/home/mozhewen/Packages/IExpr/"
+	Global`$IExprHome = $HomeDirectory <> "/Packages/IExpr"
 ]
 Needs["IExpr`Feynman`", FileNameJoin[{Global`$IExprHome, "Feynman.wl"}]]
 

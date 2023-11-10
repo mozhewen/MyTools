@@ -5,7 +5,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.10.10*)
+(*Last update: 2023.11.5*)
 
 
 (* Kinematics *)
@@ -20,7 +20,7 @@ II;
 ClearAll[II2j, j2II]
 
 (* Wrappers *)
-ClearAll[NSeries0]
+ClearAll[NSeries0, NSeries0IJ]
 ClearAll[DDCasesAll]
 ClearAll[PSLQ]
 ClearAll[AddToAssoc, RemoveFromAssoc]
@@ -165,7 +165,7 @@ j2II[expr_] :=
 	], $Failed &]
 
 
-(* ::Section::Closed:: *)
+(* ::Section:: *)
 (*Wrappers*)
 
 
@@ -174,6 +174,12 @@ NSeries0::usage =
 
 NSeries0[expr_, eps_, order_] := Normal@Series[expr, {eps, 0, order}]
 NSeries0[expr_, eps_, order_, assum_] := Normal@Series[expr, {eps, 0, order}, Assumptions -> assum]
+
+
+NSeries0IJ::usage =
+"NSeries0IJ[expr, eps, {ordI, ordJ}] Choose the \!\(\*SuperscriptBox[\(eps\), \(ordI\)]\) to \!\(\*SuperscriptBox[\(eps\), \(ordJ\)]\) terms of the series expansion of expr. "
+
+NSeries0IJ[expr_, eps_, {ordI_, ordJ_}] := Sum[eps^n SeriesCoefficient[expr, {eps, 0, n}], {n, ordI, ordJ}]
 
 
 DDCasesAll::usage =
@@ -299,7 +305,7 @@ LeadingAsymptotic0Internal[x_, varOrder__List] := FirstCase[{varOrder},
 LeadingAsymptotic0[a_, varOrder__List]:=LeadingAsymptotic0Internal[a, varOrder][[2]]
 
 
-(* ::Section:: *)
+(* ::Section::Closed:: *)
 (*I/O*)
 
 
