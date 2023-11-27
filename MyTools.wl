@@ -8,36 +8,14 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.11.3*)
+(*Last update: 2023.11.27*)
 (**)
 (*TODO:*)
-(*	1. Check the function of ZeroSIntQ[]. *)
-(*	2. Check FP[] & TID[]. *)
+(*	1. Check FP[] & TID[]. *)
 
 
 (* ::Section:: *)
 (*Begin*)
-
-
-If[!ValueQ[Global`$FIREHome],
-	MyTools`$FIREHome = $HomeDirectory <> "/Packages/fire/FIRE6/",
-	MyTools`$FIREHome = Global`$FIREHome;
-	Remove[Global`$FIREHome]
-]
-
-
-If[!ValueQ[Global`$KiraExecutable],
-	MyTools`$KiraExecutable = "/usr/local/bin/kira",
-	MyTools`$KiraExecutable = Global`$KiraExecutable;
-	Remove[Global`$KiraExecutable]
-]
-
-
-If[!ValueQ[Global`$FermatExecutable],
-	MyTools`$FermatExecutable = $HomeDirectory <> "/Packages/ferl6/fer64",
-	MyTools`$FermatExecutable = Global`$FermatExecutable;
-	Remove[Global`$FermatExecutable]
-]
 
 
 If[!ValueQ[Global`$IExprHome],
@@ -49,6 +27,11 @@ Needs["IExpr`Feynman`", FileNameJoin[{Global`$IExprHome, "Feynman.wl"}]]
 BeginPackage["MyTools`", {"IExpr`Feynman`", "IExpr`Minkowski`", "IExpr`NonAbelian`", "IExpr`SimpleContract`", "IExpr`Tensor`", "IExpr`Utils`"}]
 
 Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]]
+
+
+$FIREHome = $HomeDirectory <> "/Packages/fire/FIRE6/"
+$KiraExecutable = "/usr/local/bin/kira"
+$FermatExecutable = $HomeDirectory <> "/Packages/ferl6/fer64"
 
 
 (* Utilities *)
@@ -247,8 +230,6 @@ SInt::usage =
 "SInt[{qf1, a1}, {qf2, a2}, ...] represents the scalar integral \
 \[Integral]\!\(\*FractionBox[\(1\), \(\*SuperscriptBox[\(qf1\), \(a1\)] \*SuperscriptBox[\(qf2\), \(a2\)] ... \)]\)\[DifferentialD]l1.... "
 
-SInt[] = 1  (* Trivial integral *)
-
 
 TInt::usage =
 "TInt[{{qf1, a1}, {qf2, a2}, ...}, tens] represents the tensor integral \
@@ -264,19 +245,20 @@ representation. "
 IExpr2Int[list_List, lList_List] := IExpr2Int[#, lList]& /@ list
 IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
 	NCMonomialList[VecExpand[expr], Alternatives@@lList],
-	c_. Shortest[facs_.] /; FreeQ[c, Alternatives@@lList] :> (
+	facs_ :> (
 		(
 			ConfirmAssert[#5 === {}];
-			(c /. Denom[denom_] :> 1/Simplify@VecExpand@ContractIdx[denom]) TInt[
-				GatherTally[Join[#1, #2], Expand@*VecExpand@*ContractIdx],
-				Times@@#3
+			Times@@#1 TInt[
+				GatherTally[Join[#2, #3], Expand@*VecExpand@*ContractIdx],
+				Times@@#4
 			]
 		)& @@ ClassifyBy[FactorList[facs],
-			{Denom[denom_], a_} :> {denom, a},
-			{numer:\[Delta][_Vec, _Vec], a_} :> {numer, -a},
-			{tens:\[Delta][_Vec, _Idx], a_} :> tens^a,
-			{1, 1} -> 1,
-			rest_ :> rest
+			(*#1*){c_, a_} /; FreeQ[{c, a}, Alternatives@@lList] :>
+				(c^a /. Denom[denom_] :> 1/Simplify@VecExpand@ContractIdx[denom]),
+			(*#2*){Denom[denom_], a_} :> {denom, a},
+			(*#3*){numer:\[Delta][_Vec, _Vec], a_} :> {numer, -a},
+			(*#4*){tens:\[Delta][_Vec, _Idx], a_} :> tens^a,
+			(*#5*)rest_ :> rest
 		]
 	),
 	{1}
@@ -549,8 +531,9 @@ ZeroSIntQ::usage =
 "ZeroSIntQ[sint, lList] determines whether sint is a zero integral. "
 
 ZeroSIntQ[sint_SInt, lList_List, op:OptionsPattern[]] :=
-	Module[{sint2 = Replace[sint, {_, 0} -> Sequence], U, F, \[Lambda]},
+	Module[{sint2 = Replace[sint, {_, 0} -> Splice[{}, SInt], {1}], U, F, \[Lambda]},
 		{U, F} = UF[sint2, lList];
+		If[Length[sint2] == 0 || U F === 0, Return[True]];
 		AnyTrue[
 			Subsets[Array[Subscript[\[Alpha], #]&, Length[sint2]], {1, Length[sint2]-1}], 
 			Count[Expand@CoefficientList[U F /. Thread[# -> \[Lambda] #], \[Lambda]], Except[0]] <= 1 &
@@ -720,14 +703,16 @@ AP::usage =
 For example, \"eps\"\[Rule]-\[Eta] indicates \[Eta]<0), which will appear in the final result. If the default \
 value None is chosen, no \[ImaginaryI] \[Epsilon] will be present on the final result.
 \"Ieps\" \[Rule] Plus | Minus
-    Sign of \[ImaginaryI] \[Epsilon]. If left default, Plus is used. 
+    Sign of \[ImaginaryI] \[Epsilon] in each propagator. If left default, Plus is used. 
 \"A\" \[Rule] Plus | Minus
     Whether A is positive | negative definite (assumed to be). If left default, It is set \
 to If[Euclidean, Minus, Identity]@*Ieps. 
 \"Denom\" \[Rule] Plus | Minus
     Sign inside the denominator of the result. If left default, Plus is used. 
 \"SeparateIntegrand\" -> True | False
-	Wheher to separate the integrand into three factors: {Mellin part, U part, F part}. Default is False. "
+	Wheher to separate the integrand into three factors: {Mellin part, U part, F part}. Default is False. 
+NOTE: \"Ieps\" and \"A\" are determined by the specific integral. \"Denom\" can be freely chosen to \
+adjust the result to take the principal value. "
 
 Options[AP] = {
 	"Euclidean" -> False,
@@ -812,8 +797,8 @@ with respect to basis in the sense of change of variables of loop momenta. The n
 indices) are automatically expanded as linear combinations of basis. 
 ExpressByBasis[sint, basis, lList] express single scalar integral sint. "
 
-ExpressByBasis::guessfail = "Failed to derive momentum transformation rules for scalar integral i = `` \
-with denominator candidates = `` of the basis. "
+ExpressByBasis::guessfail = "[NOT an error] Failed to derive momentum transformation rules for scalar integral i = `` \
+with denominator candidates = `` from the basis. "
 
 Options[ExpressByBasis] = {
 	"AllMatches" -> False,
@@ -852,7 +837,9 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 							lrules = GuessTrans[List@@denom[[arrDenom, 1]], basis[[can]], lList];
 							If[lrules === Null, succ = False; Continue[]];
 							numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
-								(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basis, lList]
+								(#1 . bList + #2)^-a&@@With[{lr = LinearReduce[DD/.lrules, basis, lList]},
+									If[lr === Null, Throw[Null], lr]
+								]
 							)]],
 						(*Else*) (* No numerator (numer = 1) *)
 							numer = 1
@@ -915,7 +902,9 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 						lrules = GuessTrans[List@@denom[[arrDenom, 1]], basis[[can]], lList];
 						If[lrules === Null, succ = False; Continue[]];
 						numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
-							(#1 . bList + #2)^-a&@@LinearReduce[DD/.lrules, basis, lList]
+							(#1 . bList + #2)^-a&@@With[{lr = LinearReduce[DD/.lrules, basis, lList]},
+								If[lr === Null, Throw[Null], lr]
+							]
 						)]],
 					(*Else*) (* No numerator (numer = 1) *)
 						numer = 1;
