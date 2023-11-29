@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.11.27*)
+(*Last update: 2023.11.28*)
 (**)
 (*TODO:*)
 (*	1. Check FP[] & TID[]. *)
@@ -799,13 +799,16 @@ ExpressByBasis[sint, basis, lList] express single scalar integral sint. "
 
 ExpressByBasis::guessfail = "[NOT an error] Failed to derive momentum transformation rules for scalar integral i = `` \
 with denominator candidates = `` from the basis. "
+ExpressByBasis::linredfail = "Failed to express the numerator in terms of the basis for scalar integral i = ``. "
 
 Options[ExpressByBasis] = {
 	"AllMatches" -> False,
+	"ExactMatch" -> False,
 	"ShowProgress" -> True
 }
 ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 	Module[{AllMatches = OptionValue["AllMatches"],
+			ExactMatch = OptionValue["ExactMatch"],
 			ShowProgress = OptionValue["ShowProgress"],
 			printcell,
 			b, bList, denomPos, denom, numer, rt, succ, as, word, lrules, 
@@ -814,7 +817,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 		DynamicModule[{prog = 0},
 			If[ShowProgress =!= False,
 				printcell = PrintTemporary@Row[{
-					ProgressIndicator[Dynamic[prog], {0, Length[sintList]}],
+					ProgressIndicator[Dynamic[prog], {0, Length[sintList]}], " ",
 					Dynamic[prog], "/", Length[sintList]
 				}];
 			];
@@ -823,7 +826,13 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 				denomPos = Flatten@Position[sint, {_, a_/;a>0}, {1}, Heads -> False];
 				denom = sint[[denomPos]];
 				Catch@Do[
-					rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, "SectorOnly" -> True];
+					rt = If[ExactMatch,
+						Quiet[Check[{Permute[Range@Length[can], FindPermutation[
+							Expand@VecExpand[List@@denom[[;;, 1]]], Expand@VecExpand@basis[[can]]]
+						]}, {}, FindPermutation::norel], FindPermutation::norel],
+					(*Else*)
+						Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, "SectorOnly" -> True]
+					];
 					(* Counterexample: {l1^2, (l1-k1)^2, (l1+k2)^2} with massless k1, k2 *)
 					(*rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];*)
 					succ = True;
@@ -838,7 +847,7 @@ ExpressByBasis[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 							If[lrules === Null, succ = False; Continue[]];
 							numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
 								(#1 . bList + #2)^-a&@@With[{lr = LinearReduce[DD/.lrules, basis, lList]},
-									If[lr === Null, Throw[Null], lr]
+									If[lr === Null, Message[ExpressByBasis::linredfail, prog+1]; Throw[Null], lr]
 								]
 							)]],
 						(*Else*) (* No numerator (numer = 1) *)
@@ -874,10 +883,12 @@ ExpressByBasisParallel::usage =
 "ExpressByBasisParallel[sintList, basis, lList] is the same as ExpressByBasis[] but with parallel kernels. "
 
 Options[ExpressByBasisParallel] = {
-	"AllMatches" -> False
+	"AllMatches" -> False,
+	"ExactMatch" -> False
 }
 ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] :=
 	Module[{AllMatches = OptionValue["AllMatches"],
+			ExactMatch = OptionValue["ExactMatch"],
 			sint, 
 			b, bList, denomPos, denom, numer, rt, succ, as, word, lrules, 
 			rs, result},
@@ -888,7 +899,13 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 			denomPos = Flatten@Position[sint, {_, a_/;a>0}, {1}, Heads -> False];
 			denom = sint[[denomPos]];
 			Catch@Do[
-				rt = Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, "SectorOnly" -> True];
+				rt = If[ExactMatch,
+					Quiet[Check[{Permute[Range@Length[can], FindPermutation[
+						Expand@VecExpand[List@@denom[[;;, 1]]], Expand@VecExpand@basis[[can]]]
+					]}, {}, FindPermutation::norel], FindPermutation::norel],
+				(*Else*)
+					Match2EquivSInt[denom, SInt@@({#, 1}&/@(basis[[can]])), lList, "SectorOnly" -> True]
+				];
 				(* Counterexample: {l1^2, (l1-k1)^2, (l1+k2)^2} with massless k1, k2 *)
 				(*rt = DeleteDuplicatesBy[rt, List@@denom[[#, 2]]&];*)
 				succ = True;
@@ -903,7 +920,7 @@ ExpressByBasisParallel[sintList_List, basis_List, lList_List, OptionsPattern[]] 
 						If[lrules === Null, succ = False; Continue[]];
 						numer = Expand[Times@@Cases[sint, {DD_, a_Integer/;a<0} :> (
 							(#1 . bList + #2)^-a&@@With[{lr = LinearReduce[DD/.lrules, basis, lList]},
-								If[lr === Null, Throw[Null], lr]
+								If[lr === Null, Message[ExpressByBasis::linredfail, i]; Throw[Null], lr]
 							]
 						)]],
 					(*Else*) (* No numerator (numer = 1) *)

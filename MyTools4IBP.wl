@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.11.27*)
+(*Last update: 2023.11.28*)
 
 
 (* ::Section:: *)
@@ -47,6 +47,7 @@ BuildRules4SInt2MIs[no_, sintList_List, iiExprList_List, rules4II_List] := Threa
 
 Options[AutoIBP] := {
 	"CutPropagators" -> {},
+	"ExactMatch" -> False,
 	"Threads" -> 8
 }
 
@@ -65,7 +66,7 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List, OptionsPatter
 		{
 		Catenate@Table[
 			printCell = PrintTemporary[StringTemplate["Processing basis `1`/`2`... "][ii, Length[basisList]]];
-			ex = ExpressByBasis[sintList[[no]], basisList[[ii]], intList];
+			ex = ExpressByBasis[sintList[[no]], basisList[[ii]], intList, "ExactMatch" -> OptionValue["ExactMatch"]];
 			noVal = Position[ex, Except[Null], {1}, Heads -> False];
 			noNull = Position[ex, Null, {1}, Heads -> False];
 			iiList = DDCasesAll[ex, _II];
