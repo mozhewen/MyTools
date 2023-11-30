@@ -56,17 +56,21 @@ AutoIBP::usage =
 "AutoIBP[sintList, basisList, intList, extList] automatically performs IBP with a given list of bases. \
 It returns {IBPRules, NoOfTheRest}. "
 
-AutoIBP[sintList_List, basisList_List, intList_List, extList_List, OptionsPattern[]] :=
+AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPattern[]] :=
 	Module[{
-		printCell, printCell1, 
+		printCell, printCell1,
+		basis, extEach,
 		no = Range@Length[sintList], noVal, noNull,
 		ex, iiList, rules4II
 	},
 		DeletePath[".temp_MyTools4IBP"];
 		{
-		Catenate@Table[
+		Catenate@Table[{basis, extEach} = If[Head@Last[basisList[[ii]], Null] === List,
+				{Most@basisList[[ii]], Last@basisList[[ii]]},
+				{basisList[[ii]], {}}
+			];
 			printCell = PrintTemporary[StringTemplate["Processing basis `1`/`2`... "][ii, Length[basisList]]];
-			ex = ExpressByBasis[sintList[[no]], basisList[[ii]], intList, "ExactMatch" -> OptionValue["ExactMatch"]];
+			ex = ExpressByBasis[sintList[[no]], basis, intList, "ExactMatch" -> OptionValue["ExactMatch"]];
 			noVal = Position[ex, Except[Null], {1}, Heads -> False];
 			noNull = Position[ex, Null, {1}, Heads -> False];
 			iiList = DDCasesAll[ex, _II];
@@ -75,7 +79,7 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List, OptionsPatter
 			]];
 			If[Length[iiList] > 0,
 				GenKiraFiles[StringTemplate["basis``"][ii],
-					basisList[[ii]], iiList, intList, extList,
+					basis, iiList, intList, Union[extList, extEach],
 					"CutPropagators" -> With[{cp = OptionValue["CutPropagators"]},
 						If[Depth[cp] > 2, cp[[ii]], cp]
 					],
