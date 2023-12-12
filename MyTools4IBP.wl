@@ -37,7 +37,12 @@ Begin["`Private`"]
 
 ClearAll[BuildRules4SInt2MIs]
 BuildRules4SInt2MIs[no_, sintList_List, iiExprList_List, rules4II_List] := Thread[
-	sintList -> (iiExprList /. rules4II /. Global`d -> D // Collect[#, _II, Simplify]& // ReplaceAll[II -> II[no]])
+	sintList -> (iiExprList /. rules4II /. Global`d -> D // Collect[#, _II, Simplify]& //
+		If[no === Null,
+			Identity,
+			ReplaceAll[II -> II[no]]
+		]
+	)
 ]
 
 
@@ -58,6 +63,7 @@ It returns {IBPRules, NoOfTheRest}. "
 
 AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPattern[]] :=
 	Module[{
+		basisList2 = If[MatchQ[basisList, {__List}], basisList, {basisList}],
 		printCell, printCell1,
 		basis, extEach,
 		no = Range@Length[sintList], noVal, noNull,
@@ -65,11 +71,11 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 	},
 		DeletePath[".temp_MyTools4IBP"];
 		{
-		Catenate@Table[{basis, extEach} = If[Head@Last[basisList[[ii]], Null] === List,
-				{Most@basisList[[ii]], Last@basisList[[ii]]},
-				{basisList[[ii]], {}}
+		Catenate@Table[{basis, extEach} = If[Head@Last[basisList2[[ii]], Null] === List,
+				{Most@basisList2[[ii]], Last@basisList2[[ii]]},
+				{basisList2[[ii]], {}}
 			];
-			printCell = PrintTemporary[StringTemplate["Processing basis `1`/`2`... "][ii, Length[basisList]]];
+			printCell = PrintTemporary[StringTemplate["Processing basis `1`/`2`... "][ii, Length[basisList2]]];
 			ex = ExpressByBasis[sintList[[no]], basis, intList, "ExactMatch" -> OptionValue["ExactMatch"]];
 			noVal = Position[ex, Except[Null], {1}, Heads -> False];
 			noNull = Position[ex, Null, {1}, Heads -> False];
@@ -81,7 +87,7 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 				GenKiraFiles[StringTemplate["basis``"][ii],
 					basis, iiList, intList, Union[extList, extEach],
 					"CutPropagators" -> With[{cp = OptionValue["CutPropagators"]},
-						If[Depth[cp] > 2, cp[[ii]], cp]
+						If[MatchQ[cp, {__List}], cp[[ii]], cp]
 					],
 					"OutDir" -> ".temp_MyTools4IBP"
 				];
@@ -95,7 +101,7 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 			];
 			NotebookDelete[printCell1];
 			WithCleanup[
-				BuildRules4SInt2MIs[ii,
+				BuildRules4SInt2MIs[If[MatchQ[basisList, {__List}], ii, Null],
 					sintList[[Extract[no, noVal]]],
 					Extract[ex, noVal][[;;, 1]],
 					rules4II
@@ -104,7 +110,7 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 				no = Extract[no, noNull]
 			]
 			,
-			{ii, Length[basisList]}
+			{ii, Length[basisList2]}
 		],
 		no
 		}

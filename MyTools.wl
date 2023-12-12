@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.11.28*)
+(*Last update: 2023.12.12*)
 (**)
 (*TODO:*)
 (*	1. Check FP[] & TID[]. *)
@@ -31,7 +31,7 @@ Get[FileNameJoin[{DirectoryName[$InputFileName], "common.wl"}]]
 
 $FIREHome = $HomeDirectory <> "/Packages/fire/FIRE6/"
 $KiraExecutable = "/usr/local/bin/kira"
-$FermatExecutable = $HomeDirectory <> "/Packages/ferl6/fer64"
+$FermatExecutable = $HomeDirectory <> "/Packages/ferm6/fer64"
 
 
 (* Utilities *)
@@ -57,7 +57,7 @@ ClearAll[DisplayInt]
 (* Baikov representation & Tensor reduction *)
 ClearAll[Gram]
 ClearAll[Baikov]
-ClearAll[TID]
+ClearAll[TID, AutoTID]
 
 (* Feynman & \[Alpha]-parameterization *)
 ClearAll[\[Alpha]]
@@ -380,7 +380,7 @@ TID[tintList, lList, d] runs TID[] for a list of tensor integrals. "
 
 TID[tintList_List, lList_List, d_] := TID[#, lList, d]& /@ tintList
 TID[TInt[props_List, tens_], lList_List, d_] :=
-	Module[{iG, rules4l, numer, \[Eta]s}, 
+	Module[{DetG, iG, rules4l, numer, \[Eta]s}, 
 	With[{
 		extList = Echo@Complement[
 			DDCasesAll[Expand@VecExpand@ContractIdx@props, Vec[p_] :> p],
@@ -388,10 +388,13 @@ TID[TInt[props_List, tens_], lList_List, d_] :=
 		],
 		lPatt = Alternatives@@lList
 	},
+		If[extList === {}, Return[Indeterminate]];
+		DetG = Det@Gram[extList];
+		If[Expand@DetG === 0, Return[Indeterminate]];
 		iG = Inverse[Gram[extList]];
 		rules4l = Table[
 			\[Delta][Vec[l_], Idx[Lor, a_]] -> Sum[
-				Det@Gram[extList, ReplacePart[extList, j -> lList[[i]]]]/Det@Gram[extList] 
+				Det@Gram[extList, ReplacePart[extList, j -> lList[[i]]]]/DetG 
 				Vec[extList[[j]], Idx[Lor, a]],
 				{j, Length[extList]}
 			] + Vec[l, Idx[Lor, a]] (* This is (d-Length[extList])-dimensional *),
@@ -441,6 +444,27 @@ TID[TInt[props_List, tens_], lList_List, d_] :=
 	]]
 
 TID[sint_SInt, lList_List, d_] := sint
+
+
+AutoTID::usage =
+"AutoTID[expr, lList, d] applies TID[] to each TInt[] in 'expr' automatically. "
+
+Options[AutoTID] := {
+	Indeterminate -> Identity,
+	"ShowProgress" -> False
+}
+AutoTID[expr_, lList_List, d_, OptionsPattern[]] := Module[{tintList = DDCasesAll[expr, _TInt]},
+	expr /. If[OptionValue["ShowProgress"] === True, MapWithProgress, Map][
+		(# ->
+			(rs |-> If[rs === Indeterminate, OptionValue[Indeterminate][#], rs])@
+			QuietEcho@TID[#, lList, d]
+		)&, 
+		tintList
+	] // If[ListQ[expr] && OptionValue["ShowProgress"] === True, 
+		MapWithProgress[ContractIdx, #],
+		ContractIdx[#]
+	]&
+]
 
 
 (* ::Section:: *)
@@ -968,8 +992,8 @@ ReExpressNumeratorsFool[sintList_List, lList_List, extList_List] :=
 (*IBP*)
 
 
-(* ::Subsection:: *)
-(*FIRE interface*)
+(* ::Subsection::Closed:: *)
+(*FIRE interface (obsolete)*)
 
 
 GenFIREFiles::usage =
@@ -1230,6 +1254,8 @@ GetKiraTables::usage =
 "GetKiraTables[topoName] gets the results of Kira corresponding to topoName. Note that zero integrals and \
 trivial reductions a \[Rule] a may not appear in the result table. "
 
+GetKiraTables::kiraerr = "kira: Exit code `1`. Error message: \n`2`";
+
 Options[GetKiraTables] = {
 	"Threads" -> 8,
 	"OutDir" :> NotebookDirectory[]
@@ -1237,12 +1263,16 @@ Options[GetKiraTables] = {
 GetKiraTables[topoName_String, OptionsPattern[]] := 
 	Module[{
 			Threads = OptionValue["Threads"],
-			OutDir = OptionValue["OutDir"]
+			OutDir = OptionValue["OutDir"],
+			rt
 		},
 		(* 1. Run Kira *)
-		RunProcess[{$KiraExecutable, StringTemplate["--parallel=``"][Threads], "jobs.yaml"},
+		rt = RunProcess[{$KiraExecutable, StringTemplate["--parallel=``"][Threads], "jobs.yaml"},
 			ProcessDirectory -> FileNameJoin[{OutDir, topoName}],
 			ProcessEnvironment -> <|"FERMATPATH" -> $FermatExecutable|>
+		];
+		If[rt["ExitCode"] =!= 0 || rt["StandardError"] =!= "",
+			Message[GetKiraTables::kiraerr, rt["ExitCode"], rt["StandardError"]]
 		];
 
 		(* 5. Get results *)
