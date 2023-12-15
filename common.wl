@@ -185,7 +185,7 @@ NSeries0IJ[expr_, eps_, {ordI_, ordJ_}] := Sum[eps^n SeriesCoefficient[expr, {ep
 DDCasesAll::usage =
 "DDCasesAll[expr, pattern] is a wrapper for DeleteDuplicates@Cases[expr, pattern, All]. "
 
-DDCasesAll[expr_, pattern_] := DeleteDuplicates@Cases[expr, pattern, All]
+DDCasesAll[expr_, pattern_] := DeleteDuplicates@Cases[expr, pattern, All, Heads -> True]
 
 
 PSLQ::usage =

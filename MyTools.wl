@@ -243,26 +243,21 @@ IExpr2Int::usage =
 representation. "
 
 IExpr2Int[list_List, lList_List] := IExpr2Int[#, lList]& /@ list
-IExpr2Int[expr_, lList_List] := Enclose@Total@Replace[
-	NCMonomialList[VecExpand[expr], Alternatives@@lList],
-	facs_ :> (
-		(
-			ConfirmAssert[#5 === {}];
-			Times@@#1 TInt[
-				GatherTally[Join[#2, #3], Expand@*VecExpand@*ContractIdx],
-				Times@@#4
-			]
-		)& @@ ClassifyBy[FactorList[facs],
-			(*#1*){c_, a_} /; FreeQ[{c, a}, Alternatives@@lList] :>
-				(c^a /. Denom[denom_] :> 1/Simplify@VecExpand@ContractIdx[denom]),
-			(*#2*){Denom[denom_], a_} :> {denom, a},
-			(*#3*){numer:\[Delta][_Vec, _Vec], a_} :> {numer, -a},
-			(*#4*){tens:\[Delta][_Vec, _Idx], a_} :> tens^a,
-			(*#5*)rest_ :> rest
+IExpr2Int[expr_, lList_List] := Enclose@ClassifyFactorList[
+	(
+		ConfirmAssert[#5 === {}];
+		Times@@#1 TInt[
+			GatherTally[Join[#2, #3], Expand@*VecExpand@*ContractIdx],
+			Times@@#4
 		]
-	),
-	{1}
-]
+	)&,
+		(*#1*){c_, a_} /; FreeQ[{c, a}, Alternatives@@lList] :>
+			(c^a /. Denom[denom_] :> 1/Simplify@VecExpand@ContractIdx[denom]),
+		(*#2*){Denom[denom_], a_} :> {denom, a},
+		(*#3*){numer:\[Delta][_Vec, _Vec], a_} :> {numer, -a},
+		(*#4*){tens:\[Delta][_Vec, _Idx], a_} :> tens^a,
+		(*#5*)rest_ :> rest
+][VecExpand[expr], Alternatives@@lList]
 
 
 II2SInt::usage =
@@ -992,7 +987,7 @@ ReExpressNumeratorsFool[sintList_List, lList_List, extList_List] :=
 (*IBP*)
 
 
-(* ::Subsection::Closed:: *)
+(* ::Subsection:: *)
 (*FIRE interface (obsolete)*)
 
 
