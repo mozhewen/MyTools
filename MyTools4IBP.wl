@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.11.28*)
+(*Last update: 2023.12.20*)
 
 
 (* ::Section:: *)
@@ -25,7 +25,7 @@ Get[FileNameJoin[{pd, "MyTools.wl"}]]
 Begin["MyTools`"]
 
 
-ClearAll[AutoIBP]
+ClearAll[AutoIBP, AutoTIDAndIBP]
 
 
 Begin["`Private`"]
@@ -37,12 +37,15 @@ Begin["`Private`"]
 
 ClearAll[BuildRules4SInt2MIs]
 BuildRules4SInt2MIs[no_, sintList_List, iiExprList_List, rules4II_List] := Thread[
-	sintList -> (iiExprList /. rules4II /. Global`d -> D // Collect[#, _II, Simplify]& //
-		If[no === Null,
-			Identity,
-			ReplaceAll[II -> II[no]]
-		]
-	)
+	sintList -> MapWithProgress[
+		(# /. rules4II /. Global`d -> D // Collect[#, _II, Simplify]& //
+			If[no === Null,
+				Identity,
+				ReplaceAll[II -> II[no]]
+			]
+		)&, 
+		iiExprList
+	]
 ]
 
 
@@ -114,6 +117,70 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 		],
 		no
 		}
+	]
+
+
+AutoTIDAndIBP::usage =
+"AutoTIDAndIBP[expr, basisList, intList, extList] applies TID and IBP to 'expr' automatically. "
+
+AutoTIDAndIBP::ibpinsuff = "Insufficient bases for IBP. ";
+
+Options[AutoTIDAndIBP] := {
+	Indeterminate -> Identity,
+	"ShowProgress" -> False,
+
+	"CutPropagators" -> {},
+	"ExactMatch" -> False,
+	"Threads" -> 8
+}
+AutoTIDAndIBP[expr_, basisList_List, intList_List, extList_List:{}, op:OptionsPattern[]] :=
+	Module[{
+		printCell,
+		tintList = DDCasesAll[expr, _TInt],
+		sintList = DDCasesAll[expr, _SInt],
+		whichMap = If[OptionValue["ShowProgress"] === True, MapWithProgress, Map],
+		tint2sint,
+		rules4SInt2MIs, noRest,
+		Lorentz,
+		rules
+	},
+		printCell = PrintTemporary["Stage 1: TID"];
+		tint2sint = whichMap[
+			((rs |-> If[rs === Indeterminate, OptionValue[Indeterminate][#], rs])@
+				QuietEcho@TID[#, intList, D]
+			)&,
+			tintList
+		];
+		sintList = Union[sintList, DDCasesAll[tint2sint, _SInt]];
+		NotebookDelete[printCell];
+
+		printCell = PrintTemporary["Stage 2: IBP"];
+		{rules4SInt2MIs, noRest} = AutoIBP[sintList, basisList, intList, extList, FilterRules[op, Options[AutoIBP]]];
+		If[noRest =!= {}, Message[AutoTIDAndIBP::ibpinsuff]; 
+			Return[sintList[[noRest]]]
+		];
+		NotebookDelete[printCell];
+
+		WithCleanup[
+			(*Init*)printCell = PrintTemporary["Stage 3: Substitute into the original expression"],
+			{tint2sint, rules4SInt2MIs};
+			
+			tint2sint = whichMap[
+				(ClassifyFactorList[(Times@@#1 Lorentz[Times@@#2])&,
+					{patt_?(FreeQ[Idx[Lor,_]]), p_} :> patt^p,
+					{rest_, p_} :> rest^p
+				][#, Idx[Lor, _]] /. rules4SInt2MIs
+					// Collect[#, {_Lorentz, II[_][__]}, Simplify]&
+					// ReplaceAll[Lorentz -> Identity])&,
+				tint2sint
+			];
+			rules = Join[Thread[tintList -> tint2sint], rules4SInt2MIs]; 
+			{
+				expr /. rules // If[ListQ[expr], whichMap, Construct][ContractIdx, #]&,
+				rules
+			},
+			(*Cleanup*)NotebookDelete[printCell]
+		]
 	]
 
 

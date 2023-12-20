@@ -395,7 +395,8 @@ TID[TInt[props_List, tens_], lList_List, d_] :=
 			] + Vec[l, Idx[Lor, a]] (* This is (d-Length[extList])-dimensional *),
 			{i, Length[lList]}
 		];
-		numer = Expand@VecExpand[ContractIdx[tens] /. rules4l];
+
+		numer = Expand[VecExpand[ContractIdx[tens] /. rules4l], \[Delta][Vec[lPatt], Idx[Lor, _]]];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
 		numer = EchoLabel["numer after"]@GatherTally@Replace[
 			numer,
@@ -435,7 +436,7 @@ TID[TInt[props_List, tens_], lList_List, d_] :=
 					]
 				]
 			]
-		]& @@@ numer //Total //Collect[#, _SInt, Simplify]&
+		]& @@@ numer //Total //Collect[#, _SInt]&
 	]]
 
 TID[sint_SInt, lList_List, d_] := sint
