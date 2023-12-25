@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.12.20*)
+(*Last update: 2023.12.24*)
 
 
 (* ::Section:: *)
@@ -38,7 +38,7 @@ Begin["`Private`"]
 ClearAll[BuildRules4SInt2MIs]
 BuildRules4SInt2MIs[no_, sintList_List, iiExprList_List, rules4II_List] := Thread[
 	sintList -> MapWithProgress[
-		(# /. rules4II /. Global`d -> D // Collect[#, _II, Simplify]& //
+		(# /. Append[rules4II, _II -> 0] /. Global`d -> D // Collect[#, _II, Simplify]& //
 			If[no === Null,
 				Identity,
 				ReplaceAll[II -> II[no]]
@@ -121,12 +121,14 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 
 
 AutoTIDAndIBP::usage =
-"AutoTIDAndIBP[expr, basisList, intList, extList] applies TID and IBP to 'expr' automatically. "
+"AutoTIDAndIBP[expr, basisList, intList, extList] applies TID and IBP to 'expr' automatically. 
+D -> dim sets the dimension used in the contraction of integrals and other parts of 'expr'. "
 
 AutoTIDAndIBP::ibpinsuff = "Insufficient bases for IBP. ";
 
 Options[AutoTIDAndIBP] := {
 	Indeterminate -> Identity,
+	D -> D,
 	"ShowProgress" -> False,
 
 	"CutPropagators" -> {},
@@ -142,12 +144,12 @@ AutoTIDAndIBP[expr_, basisList_List, intList_List, extList_List:{}, op:OptionsPa
 		tint2sint,
 		rules4SInt2MIs, noRest,
 		Lorentz,
-		rules
+		rules, d
 	},
 		printCell = PrintTemporary["Stage 1: TID"];
 		tint2sint = whichMap[
 			((rs |-> If[rs === Indeterminate, OptionValue[Indeterminate][#], rs])@
-				QuietEcho@TID[#, intList, D]
+				QuietEcho@TID[#, intList, OptionValue[D]]
 			)&,
 			tintList
 		];
@@ -155,7 +157,7 @@ AutoTIDAndIBP[expr_, basisList_List, intList_List, extList_List:{}, op:OptionsPa
 		NotebookDelete[printCell];
 
 		printCell = PrintTemporary["Stage 2: IBP"];
-		{rules4SInt2MIs, noRest} = AutoIBP[sintList, basisList, intList, extList, FilterRules[op, Options[AutoIBP]]];
+		{rules4SInt2MIs, noRest} = AutoIBP[sintList, basisList, intList, extList, FilterRules[{op}, Options[AutoIBP]]];
 		If[noRest =!= {}, Message[AutoTIDAndIBP::ibpinsuff]; 
 			Return[sintList[[noRest]]]
 		];
@@ -176,7 +178,9 @@ AutoTIDAndIBP[expr_, basisList_List, intList_List, extList_List:{}, op:OptionsPa
 			];
 			rules = Join[Thread[tintList -> tint2sint], rules4SInt2MIs]; 
 			{
-				expr /. rules // If[ListQ[expr], whichMap, Construct][ContractIdx, #]&,
+				expr /. rules // If[OptionValue[D] =!= D, ReplaceAll[D -> d], Identity]
+					// If[ListQ[expr], whichMap, Construct][ContractIdx, #]&
+					// If[OptionValue[D] =!= D, ReplaceAll[{D -> OptionValue[D], d -> D}], Identity],
 				rules
 			},
 			(*Cleanup*)NotebookDelete[printCell]

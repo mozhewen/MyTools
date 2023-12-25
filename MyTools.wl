@@ -8,7 +8,7 @@
 (**)
 (*Mathematica version: 13.3*)
 (**)
-(*Last update: 2023.12.12*)
+(*Last update: 2023.12.24*)
 (**)
 (*TODO:*)
 (*	1. Check FP[] & TID[]. *)
@@ -369,13 +369,14 @@ Baikov[int_List, ext_List, d_, OptionsPattern[]] :=
 
 
 TID::usage =
-"TID[tint, lList, d] performs Tensor Integral Decomposition for tensor integral 'tint' in 'd' dimensions \
-with loop momenta given by 'lList'. 
+"TID[tint, lList, d] performs Tensor Integral Decomposition for tensor integral 'tint' \
+with loop momenta given by 'lList', assuming that the tensor indices in the numerator are \
+in 'd' dimensions. 
 TID[tintList, lList, d] runs TID[] for a list of tensor integrals. "
 
 TID[tintList_List, lList_List, d_] := TID[#, lList, d]& /@ tintList
 TID[TInt[props_List, tens_], lList_List, d_] :=
-	Module[{DetG, iG, rules4l, numer, \[Eta]s}, 
+	Module[{DetG, iG, rules4l, numer, idxStat, DD}, 
 	With[{
 		extList = Echo@Complement[
 			DDCasesAll[Expand@VecExpand@ContractIdx@props, Vec[p_] :> p],
@@ -388,55 +389,66 @@ TID[TInt[props_List, tens_], lList_List, d_] :=
 		If[Expand@DetG === 0, Return[Indeterminate]];
 		iG = Inverse[Gram[extList]];
 		rules4l = Table[
-			\[Delta][Vec[l_], Idx[Lor, a_]] -> Sum[
-				Det@Gram[extList, ReplacePart[extList, j -> lList[[i]]]]/DetG 
-				Vec[extList[[j]], Idx[Lor, a]],
-				{j, Length[extList]}
-			] + Vec[l, Idx[Lor, a]] (* This is (d-Length[extList])-dimensional *),
+			\[Delta][Vec[l_], Idx[Lor, a_]] :> Evaluate[
+				Sum[
+					Det@Gram[extList, ReplacePart[extList, j -> lList[[i]]]]/DetG 
+					Vec[extList[[j]], Idx[Lor, a]],
+					{j, Length[extList]}
+				] + Vec[l, Idx[Lor, a]] (* This l is (D-Length[extList])-dimensional *)
+			],
 			{i, Length[lList]}
 		];
 
-		numer = Expand[VecExpand[ContractIdx[tens] /. rules4l], \[Delta][Vec[lPatt], Idx[Lor, _]]];
+		numer = Expand[VecExpand[UncontractIdx[tens, \[Delta][Vec[lPatt], _]] /. rules4l], \[Delta][Vec[lPatt], Idx[Lor, _]]];
 		numer = If[Head[numer] === Plus, List@@numer, {numer}];
-		numer = EchoLabel["numer after"]@GatherTally@Replace[
+		numer = ({Times@@#1, Times@@#2}&@@ClassifyBy[FactorList[#],
+			{l\[Mu]:\[Delta][Vec[lPatt], Idx[Lor, _]], p_} :> l\[Mu]^p,
+			{coef_, p_} :> ContractIdx[coef^p]
+		]& /@ numer) // GatherTally // EchoLabel["numer after"];
+		(*numer = EchoLabel["numer after"]@GatherTally@Replace[
 			numer,
 			(coef_ |
-			 (l1:\[Delta][Vec[lPatt], Idx[Lor, _]]) |
-			 HoldPattern@Times[ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..] |
-			 (coef_ (ls:\[Delta][Vec[lPatt], Idx[Lor, _]] ..))
+			 (l1:(\[Delta][Vec[lPatt], Idx[Lor, _]])) |
+			 HoldPattern@Times[ls:(\[Delta][Vec[lPatt], Idx[Lor, _]]) ..] |
+			 (coef_ (ls:(\[Delta][Vec[lPatt], Idx[Lor, _]]) ..))
 			) /; FreeQ[Times[coef], \[Delta][Vec[lPatt], Idx[Lor, _]]] :> {Times[l1, ls], Times[coef]},
 			{1}
-		];
-		
-		(* NOTE: 
-			1. ls should not have powers of indexed l, since it should have been contracted and moved
-			into coef;
-			2. Vec[] in coef are d-dimensional, Vec[] in ls are (d-Length[extList])-dimensional. 
-		*)
+		];*)
+
+		(* NOTE: Vec[] in ls are (D-Length[extList])-dimensional now. *)
 		With[{ls = Catenate[Table[#1, #2]& @@@ Rest@FactorList[#1]]},
 			If[Not@EvenQ@Length[EchoLabel["ls"]@ls],
 				(* 0 *)Nothing,
 				With[{coef = EchoLabel["coef"]@Simplify@#2,
-					  lis = ls /. \[Delta][Vec[lPatt], \[Mu]:Idx[Lor, _]] :> \[Mu]},
-					\[Eta]s = MakeMetricProduct[lis, "List"];
+					  lis = ls /. \[Delta][Vec[lPatt], \[Mu]:Idx[Lor, i_]] :> \[Mu]},
+					idxStat = <||>;
+				With[{lis2 = Table[NewIdx[Lor, idxStat], Length[lis]]},
+				With[{ls2 = MapIndexed[(#1/.Extract[lis, #2] -> Extract[lis2, #2])&, ls],
+					  \[Eta]s2 = MakeMetricProduct[lis2, "List"]},
 					IExpr2Int[
 						Times[
-							(* These are always d-dimensional *)
+							(* NOTE: These are always D-dimensional (Original D), 
+								l.p is projected into d-dimensional automatically by p *)
 							coef Times@@(Denom[#1]^#2& @@@ props),
 							(* Should be re-expressed by the d-dimensional ones *)
-							EchoLabel["sln"]@LinearSolve[
-								(*m=*)Outer[ContractIdx[#1 #2]&, \[Eta]s, \[Eta]s],
-								(*b=*)ContractIdx[Times@@ls #]& /@ \[Eta]s
-							] . \[Eta]s /. {
-								D -> d - Length[extList],
-								\[Delta][a_, b_] -> \[Delta][a, b] - (\[Delta][Vec[#], a]&/@extList) . iG . (\[Delta][Vec[#], b]&/@extList)
-							}
-						],
+							EchoLabel["sln"]@LinearSolve[(* The solution is a list of Lorentz scalars *)
+								(*m=*)Outer[ContractIdx[#1 #2]&, \[Eta]s2, \[Eta]s2],
+								(*b=*)ContractIdx[Times@@ls2 #]& /@ \[Eta]s2
+							] . \[Eta]s2 /. {
+								D -> DD - Length[extList],
+								\[Delta][a_, b_] :> Evaluate[
+									\[Delta][a, b] - (\[Delta][Vec[#], a]&/@extList) . iG . (\[Delta][Vec[#], b]&/@extList)
+								]
+							} /. Thread[lis2 -> lis]
+						] // ContractIdx // ReplaceAll[{
+							D -> d (* Only modify the dimension here!! *),
+							DD -> D
+						}],
 						lList
 					]
-				]
+				]]]
 			]
-		]& @@@ numer //Total //Collect[#, _SInt]&
+		]& @@@ numer // Total // Collect[#, _SInt]&
 	]]
 
 TID[sint_SInt, lList_List, d_] := sint
@@ -988,7 +1000,7 @@ ReExpressNumeratorsFool[sintList_List, lList_List, extList_List] :=
 (*IBP*)
 
 
-(* ::Subsection:: *)
+(* ::Subsection::Closed:: *)
 (*FIRE interface (obsolete)*)
 
 
@@ -1260,7 +1272,7 @@ GetKiraTables[topoName_String, OptionsPattern[]] :=
 	Module[{
 			Threads = OptionValue["Threads"],
 			OutDir = OptionValue["OutDir"],
-			rt
+			rt, result
 		},
 		(* 1. Run Kira *)
 		rt = RunProcess[{$KiraExecutable, StringTemplate["--parallel=``"][Threads], "jobs.yaml"},
@@ -1270,9 +1282,20 @@ GetKiraTables[topoName_String, OptionsPattern[]] :=
 		If[rt["ExitCode"] =!= 0 || rt["StandardError"] =!= "",
 			Message[GetKiraTables::kiraerr, rt["ExitCode"], rt["StandardError"]]
 		];
-
-		(* 5. Get results *)
-		Get[FileNameJoin[{OutDir, topoName, "results", topoName, "kira_target.m"}]]/.Symbol[topoName] -> II
+		If[rt["ExitCode"] =!= 0,
+			$Failed,
+		(*Else*)
+			(* 5. Get results *)
+			Check[Join[
+				(* IBP *)
+				Get[FileNameJoin[{OutDir, topoName, "results", topoName, "kira_target.m"}]],
+				(* Masters *)
+				(# -> #&) /@ (Import[FileNameJoin[{OutDir, topoName, "results", topoName, "masters"}], "List"]
+						// StringTrim[#,"#"~~___~~EndOfString]& // ToExpression)
+			],
+				$Failed
+			] /. Symbol[topoName] -> II
+		]
 	]
 
 
