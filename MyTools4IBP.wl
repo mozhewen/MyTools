@@ -122,7 +122,9 @@ AutoIBP[sintList_List, basisList_List, intList_List, extList_List:{}, OptionsPat
 
 AutoTIDAndIBP::usage =
 "AutoTIDAndIBP[expr, basisList, intList, extList] applies TID and IBP to 'expr' automatically. 
-D -> dim sets the dimension used in the contraction of integrals and other parts of 'expr'. "
+D \[Rule] dim
+    sets the dimension used in TID[] and the contraction of integrals with other parts of \
+'expr'. "
 
 AutoTIDAndIBP::ibpinsuff = "Insufficient bases for IBP. ";
 
